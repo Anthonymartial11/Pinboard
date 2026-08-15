@@ -1,0 +1,2651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="robots" content="noindex, nofollow" />
+<meta name="theme-color" content="#1a1410" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Power Board" />
+<title>Idaho Power Board</title>
+<link rel="manifest" href="./manifest.json" />
+<link rel="apple-touch-icon" href="./icon-512.png" />
+<link rel="icon" href="./icon-512.png" />
+</head>
+<body>
+
+<style>
+/* IDAHO POWER BOARD — standalone crime-board app.
+   No framework, no build step. Open index.html and go. */
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; }
+body { background: #1a1410; }
+button { font: inherit; }
+
+.pwb-root {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: #1a1410;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  font-family: "American Typewriter", "Special Elite", "Courier New", monospace;
+  color: #201a14;
+}
+
+/* ── wood frame + cork ─────────────────────────────────────────────── */
+.pwb-viewport {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  cursor: grab;
+}
+.pwb-viewport.pwb-dragging { cursor: grabbing; }
+
+.pwb-world {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+.pwb-world.pwb-glide {
+  transition: transform 0.65s cubic-bezier(0.22, 0.9, 0.28, 1);
+}
+
+.pwb-cork {
+  position: absolute;
+  border-radius: 26px;
+  background-color: #a87b4a;
+  background-image:
+    radial-gradient(ellipse at 28% 18%, rgba(255, 236, 200, 0.16), transparent 55%),
+    radial-gradient(ellipse at 75% 80%, rgba(60, 34, 12, 0.22), transparent 60%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+  background-blend-mode: normal, normal, overlay;
+  box-shadow:
+    inset 0 0 120px rgba(35, 18, 4, 0.55),
+    inset 0 0 14px rgba(35, 18, 4, 0.5);
+  border: 16px solid #3b2413;
+  outline: 3px solid #241408;
+}
+.pwb-cork::after {
+  content: "";
+  position: absolute;
+  inset: -16px;
+  border: 16px solid transparent;
+  border-image: linear-gradient(135deg, #5a3a1d, #2e1a0b 40%, #59371a 70%, #241203) 1;
+  pointer-events: none;
+}
+
+/* ── segment placards ──────────────────────────────────────────────── */
+.pwb-seg-area {
+  position: absolute;
+  border-radius: 18px;
+  cursor: zoom-in;
+}
+.pwb-seg-area:hover { background: rgba(255, 244, 214, 0.05); }
+
+.pwb-seg-label {
+  position: absolute;
+  transform: translateX(-50%);
+  background: #f4ead2;
+  color: #241c12;
+  font-family: "Avenir Next Condensed", "Oswald", "Arial Narrow", "Helvetica Neue", sans-serif;
+  font-weight: 700;
+  font-size: 30px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 10px 26px 8px;
+  border: 1px solid rgba(60, 40, 12, 0.45);
+  box-shadow: 0 3px 9px rgba(20, 8, 0, 0.5);
+  white-space: nowrap;
+  cursor: zoom-in;
+}
+.pwb-seg-label::before,
+.pwb-seg-label::after {
+  content: "";
+  position: absolute;
+  top: -9px;
+  width: 54px;
+  height: 20px;
+  background: rgba(236, 226, 198, 0.65);
+  border: 1px solid rgba(150, 130, 90, 0.35);
+  transform: rotate(-5deg);
+}
+.pwb-seg-label::before { left: -20px; }
+.pwb-seg-label::after { right: -20px; transform: rotate(6deg); }
+.pwb-seg-blurb {
+  display: block;
+  font-family: "American Typewriter", "Special Elite", "Courier New", monospace;
+  font-weight: 400;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  margin-top: 3px;
+  opacity: 0.78;
+  white-space: normal;
+  max-width: 460px;
+}
+
+/* ── strings ───────────────────────────────────────────────────────── */
+.pwb-strings {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+.pwb-string {
+  fill: none;
+  stroke-linecap: round;
+  transition: opacity 0.25s;
+}
+.pwb-edge-label {
+  position: absolute;
+  transform: translate(-50%, -50%) rotate(-1.5deg);
+  background: #fdf6dd;
+  border: 1px solid rgba(120, 90, 40, 0.5);
+  box-shadow: 0 2px 6px rgba(20, 8, 0, 0.45);
+  padding: 4px 9px;
+  font-size: 12.5px;
+  line-height: 1.25;
+  max-width: 240px;
+  text-align: center;
+  pointer-events: none;
+  z-index: 60;
+}
+
+/* ── pins + cards ──────────────────────────────────────────────────── */
+.pwb-node {
+  position: absolute;
+  transform-style: preserve-3d;
+  cursor: pointer;
+  transition: opacity 0.25s, filter 0.25s, transform 0.3s, width 0.3s, height 0.3s, left 0.3s;
+}
+.pwb-node.pwb-dim { opacity: 0.42; filter: saturate(0.6); }
+.pwb-node.pwb-linked { filter: drop-shadow(0 0 14px rgba(255, 220, 120, 0.55)); }
+
+.pwb-flip {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 0.55s cubic-bezier(0.3, 0.8, 0.3, 1);
+}
+.pwb-node.pwb-open .pwb-flip { transform: rotateY(180deg); }
+
+.pwb-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.pwb-face-back { transform: rotateY(180deg); }
+
+.pwb-pushpin {
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  z-index: 5;
+  background: radial-gradient(circle at 34% 30%, #ff8a80, #c62828 55%, #7f1010);
+  box-shadow:
+    0 2px 1px rgba(0, 0, 0, 0.35),
+    0 6px 8px rgba(0, 0, 0, 0.45);
+}
+.pwb-pushpin::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 90%;
+  width: 2.5px;
+  height: 9px;
+  transform: translateX(-50%);
+  background: linear-gradient(#9a9a9a, #4c4c4c);
+}
+.pwb-pushpin.pwb-pin-org { background: radial-gradient(circle at 34% 30%, #9ecbff, #1565c0 55%, #0b3a70); }
+.pwb-pushpin.pwb-pin-pac { background: radial-gradient(circle at 34% 30%, #b6ffb0, #2e7d32 55%, #0f4514); }
+.pwb-pushpin.pwb-pin-note { background: radial-gradient(circle at 34% 30%, #fff3a0, #f9a825 55%, #8a5c05); }
+
+/* polaroid (person) */
+.pwb-polaroid {
+  position: absolute;
+  inset: 0;
+  background: #f7f2e6;
+  border: 1px solid rgba(90, 70, 40, 0.35);
+  box-shadow: 0 8px 18px rgba(15, 6, 0, 0.55);
+  padding: 14px 12px 10px;
+  display: flex;
+  flex-direction: column;
+}
+.pwb-photo {
+  position: relative;
+  height: 55%;
+  overflow: hidden;
+  border: 1px solid rgba(70, 50, 25, 0.4);
+  filter: sepia(0.42) contrast(1.02);
+}
+.pwb-photo-bg { position: absolute; inset: 0; }
+.pwb-photo-initials {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: Didot, "Playfair Display", Georgia, serif;
+  font-weight: 700;
+  font-size: 56px;
+  color: rgba(255, 250, 235, 0.88);
+  text-shadow: 0 3px 10px rgba(0, 0, 0, 0.55);
+}
+.pwb-photo-scanlines {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.09) 0 1px, transparent 1px 3px);
+  mix-blend-mode: multiply;
+}
+.pwb-deceased .pwb-photo { filter: grayscale(1) contrast(1.05); }
+.pwb-ribbon {
+  position: absolute;
+  top: 6px;
+  right: -34px;
+  transform: rotate(38deg);
+  background: #111;
+  color: #eee;
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  padding: 3px 36px;
+  z-index: 4;
+}
+.pwb-name {
+  margin-top: 8px;
+  font-family: "Avenir Next Condensed", "Oswald", "Arial Narrow", "Helvetica Neue", sans-serif;
+  font-weight: 700;
+  font-size: 17px;
+  line-height: 1.1;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #17110a;
+}
+.pwb-role {
+  margin-top: 3px;
+  font-size: 11.5px;
+  line-height: 1.3;
+  color: #4a3c28;
+}
+.pwb-tier-stamp {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  z-index: 4;
+  font-family: "Avenir Next Condensed", "Oswald", "Arial Narrow", "Helvetica Neue", sans-serif;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  padding: 2px 7px;
+  border: 2.5px solid;
+  border-radius: 4px;
+  transform: rotate(8deg);
+  opacity: 0.92;
+  background: rgba(255, 252, 240, 0.72);
+}
+.pwb-tier-S { color: #a01212; border-color: #a01212; }
+.pwb-tier-A { color: #b05e10; border-color: #b05e10; }
+.pwb-tier-B { color: #1c5e8a; border-color: #1c5e8a; }
+.pwb-tier-C { color: #2e6b2e; border-color: #2e6b2e; }
+.pwb-tier-D { color: #5a5a5a; border-color: #5a5a5a; }
+
+/* org folder card */
+.pwb-folder {
+  position: absolute;
+  inset: 0;
+  background: #e8cf9e;
+  border: 1px solid rgba(110, 80, 35, 0.5);
+  box-shadow: 0 8px 18px rgba(15, 6, 0, 0.5);
+  border-radius: 4px 10px 4px 4px;
+  padding: 22px 14px 10px;
+}
+.pwb-folder::before {
+  content: "";
+  position: absolute;
+  top: -11px;
+  left: 10px;
+  width: 42%;
+  height: 14px;
+  background: #e8cf9e;
+  border: 1px solid rgba(110, 80, 35, 0.5);
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+}
+.pwb-folder .pwb-name { font-size: 18px; margin-top: 2px; }
+.pwb-folder .pwb-role { font-size: 12px; }
+.pwb-folder-stamp {
+  position: absolute;
+  bottom: 8px;
+  right: 10px;
+  font-family: "Avenir Next Condensed", "Oswald", "Arial Narrow", "Helvetica Neue", sans-serif;
+  font-size: 10px;
+  letter-spacing: 0.24em;
+  color: rgba(140, 30, 20, 0.75);
+  border: 2px solid rgba(140, 30, 20, 0.6);
+  padding: 2px 6px;
+  transform: rotate(-6deg);
+}
+
+/* pac index card */
+.pwb-index {
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-linear-gradient(0deg, transparent 0 26px, rgba(70, 120, 180, 0.35) 26px 27px),
+    linear-gradient(#fffdf4, #fef9e8);
+  border: 1px solid rgba(120, 100, 60, 0.45);
+  box-shadow: 0 8px 18px rgba(15, 6, 0, 0.5);
+  padding: 18px 14px 10px;
+}
+.pwb-index::before {
+  content: "";
+  position: absolute;
+  top: 30px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: rgba(200, 60, 50, 0.5);
+}
+.pwb-index .pwb-name { font-family: "American Typewriter", "Special Elite", "Courier New", monospace; font-size: 16px; text-transform: none; }
+.pwb-index .pwb-role { font-size: 11.5px; }
+
+/* note card */
+.pwb-notecard {
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-linear-gradient(0deg, transparent 0 24px, rgba(120, 130, 150, 0.28) 24px 25px),
+    linear-gradient(#fbf3b8, #f6e98f);
+  border: 1px solid rgba(140, 120, 40, 0.5);
+  box-shadow: 0 8px 18px rgba(15, 6, 0, 0.5);
+  padding: 20px 14px 10px;
+}
+.pwb-notecard .pwb-name { font-family: "Marker Felt", "Permanent Marker", cursive; font-size: 17px; text-transform: none; letter-spacing: 0; }
+.pwb-notecard .pwb-role { font-family: "Bradley Hand", Noteworthy, "Caveat", cursive; font-size: 15px; }
+.pwb-note-summary {
+  margin-top: 6px;
+  font-family: "Bradley Hand", Noteworthy, "Caveat", cursive;
+  font-size: 16px;
+  line-height: 1.25;
+  color: #3a3018;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ── dossier (card back) ───────────────────────────────────────────── */
+.pwb-dossier {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(#f6efdd, #efe5cc);
+  border: 1px solid rgba(90, 70, 40, 0.45);
+  box-shadow: 0 10px 24px rgba(15, 6, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.pwb-dossier-head {
+  padding: 10px 12px 8px;
+  border-bottom: 2px solid rgba(120, 30, 20, 0.55);
+  background: rgba(220, 200, 160, 0.35);
+}
+.pwb-dossier-kicker {
+  font-size: 10px;
+  letter-spacing: 0.3em;
+  color: #7c1c14;
+  text-transform: uppercase;
+}
+.pwb-dossier-name {
+  font-family: "Avenir Next Condensed", "Oswald", "Arial Narrow", "Helvetica Neue", sans-serif;
+  font-weight: 700;
+  font-size: 19px;
+  text-transform: uppercase;
+  line-height: 1.05;
+  margin-top: 2px;
+}
+.pwb-dossier-role { font-size: 11.5px; color: #4a3c28; margin-top: 2px; }
+.pwb-dossier-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 12px 14px;
+  font-size: 12.5px;
+  line-height: 1.42;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+.pwb-dossier-body::-webkit-scrollbar { width: 5px; }
+.pwb-dossier-body::-webkit-scrollbar-thumb { background: rgba(110, 80, 40, 0.5); }
+.pwb-sec {
+  margin: 10px 0 4px;
+  font-family: "Avenir Next Condensed", "Oswald", "Arial Narrow", "Helvetica Neue", sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  color: #7c1c14;
+  text-transform: uppercase;
+  border-bottom: 1px solid rgba(124, 28, 20, 0.35);
+  padding-bottom: 2px;
+}
+.pwb-sec:first-child { margin-top: 0; }
+.pwb-fact { margin: 5px 0 0 2px; padding-left: 12px; position: relative; }
+.pwb-fact::before { content: "▸"; position: absolute; left: 0; color: #8a6a34; }
+.pwb-motive {
+  background: rgba(255, 244, 200, 0.8);
+  border-left: 3px solid #b05e10;
+  padding: 5px 8px;
+  margin-top: 5px;
+}
+.pwb-play {
+  background: rgba(212, 236, 210, 0.75);
+  border-left: 3px solid #2e6b2e;
+  padding: 5px 8px;
+  margin-top: 5px;
+}
+.pwb-flag {
+  background: rgba(250, 215, 210, 0.85);
+  border-left: 3px solid #a01212;
+  padding: 5px 8px;
+  margin-top: 5px;
+  font-size: 11.5px;
+}
+.pwb-conn-btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin-top: 5px;
+  padding: 5px 8px;
+  background: rgba(240, 232, 210, 0.9);
+  border: 1px solid rgba(110, 85, 45, 0.4);
+  border-radius: 3px;
+  font-family: "American Typewriter", "Special Elite", "Courier New", monospace;
+  font-size: 11.5px;
+  line-height: 1.3;
+  color: #241c10;
+  cursor: pointer;
+}
+.pwb-conn-btn:hover { background: rgba(255, 248, 226, 1); border-color: rgba(150, 40, 25, 0.6); }
+.pwb-conn-kind { color: #7c1c14; font-weight: 700; }
+.pwb-verif {
+  display: inline-block;
+  font-family: "Avenir Next Condensed", "Oswald", "Arial Narrow", "Helvetica Neue", sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  padding: 2px 8px;
+  border: 2px solid;
+  border-radius: 3px;
+  transform: rotate(-3deg);
+  margin-top: 6px;
+}
+.pwb-verif-verified { color: #2e6b2e; border-color: #2e6b2e; }
+.pwb-verif-partial { color: #b05e10; border-color: #b05e10; }
+.pwb-verif-unverified { color: #a01212; border-color: #a01212; }
+.pwb-dossier-close {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  z-index: 6;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid rgba(110, 30, 20, 0.6);
+  background: rgba(245, 235, 215, 0.9);
+  color: #7c1c14;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* ── chrome (top bar, legend) ──────────────────────────────────────── */
+.pwb-topbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  padding-top: calc(10px + env(safe-area-inset-top, 0px));
+  background: linear-gradient(rgba(16, 10, 5, 0.92), rgba(16, 10, 5, 0.72) 80%, transparent);
+  pointer-events: none;
+}
+.pwb-topbar > * { pointer-events: auto; }
+.pwb-title {
+  font-family: "Avenir Next Condensed", "Oswald", "Arial Narrow", "Helvetica Neue", sans-serif;
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: 0.24em;
+  color: #f0e2bf;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.7);
+}
+.pwb-title small {
+  display: block;
+  font-family: "American Typewriter", "Special Elite", "Courier New", monospace;
+  font-weight: 400;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: rgba(240, 226, 191, 0.66);
+}
+.pwb-search-wrap { position: relative; margin-left: auto; }
+.pwb-search {
+  width: min(300px, 56vw);
+  background: rgba(246, 238, 218, 0.95);
+  border: 1px solid rgba(120, 90, 40, 0.6);
+  border-radius: 4px;
+  padding: 7px 12px;
+  font-family: "American Typewriter", "Special Elite", "Courier New", monospace;
+  font-size: 13px;
+  color: #241c10;
+  outline: none;
+}
+.pwb-search::placeholder { color: rgba(90, 70, 40, 0.6); }
+.pwb-search-results {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: min(340px, 80vw);
+  max-height: 44vh;
+  overflow-y: auto;
+  background: #f6eedb;
+  border: 1px solid rgba(120, 90, 40, 0.7);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6);
+  z-index: 120;
+}
+.pwb-search-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 12px;
+  border: none;
+  border-bottom: 1px solid rgba(120, 90, 40, 0.2);
+  font-family: "American Typewriter", "Special Elite", "Courier New", monospace;
+  font-size: 12.5px;
+  cursor: pointer;
+  background: transparent;
+  color: #241c10;
+}
+.pwb-search-item:hover { background: rgba(255, 248, 226, 1); }
+.pwb-search-item small { display: block; opacity: 0.65; font-size: 11px; }
+.pwb-btn {
+  color: #e8d9b8;
+  background: rgba(60, 38, 16, 0.85);
+  border: 1px solid rgba(220, 190, 130, 0.4);
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-family: "Avenir Next Condensed", "Oswald", "Arial Narrow", "Helvetica Neue", sans-serif;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  cursor: pointer;
+}
+.pwb-btn:hover { background: rgba(92, 58, 24, 0.95); }
+
+.pwb-legend {
+  position: absolute;
+  left: 12px;
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  z-index: 100;
+  background: rgba(16, 10, 5, 0.85);
+  border: 1px solid rgba(220, 190, 130, 0.3);
+  border-radius: 6px;
+  padding: 9px 12px;
+  color: #e8d9b8;
+  font-family: "American Typewriter", "Special Elite", "Courier New", monospace;
+  font-size: 11px;
+  line-height: 1.7;
+}
+.pwb-legend-row { display: flex; align-items: center; gap: 8px; }
+.pwb-legend-swatch { width: 26px; height: 3px; border-radius: 2px; flex: none; }
+.pwb-hint {
+  position: absolute;
+  right: 12px;
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  z-index: 100;
+  color: rgba(232, 217, 184, 0.75);
+  font-family: "American Typewriter", "Special Elite", "Courier New", monospace;
+  font-size: 11px;
+  text-align: right;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.8);
+  pointer-events: none;
+}
+
+@media (max-width: 700px) {
+  .pwb-title { font-size: 14px; letter-spacing: 0.16em; }
+  .pwb-legend { display: none; }
+  .pwb-seg-blurb { display: none; }
+}
+
+</style>
+<div class="pwb-root">
+  <div id="viewport" class="pwb-viewport">
+    <div id="world" class="pwb-world"></div>
+  </div>
+  <div id="topbar" class="pwb-topbar">
+    <div class="pwb-title">IDAHO POWER BOARD
+      <small>Treasure Valley + state · public record · updated 15 Aug 2026</small>
+    </div>
+    <div class="pwb-search-wrap">
+      <input id="search" class="pwb-search" placeholder="Find a name, org, role…" autocomplete="off" />
+      <div id="search-results" class="pwb-search-results" style="display:none"></div>
+    </div>
+    <button id="fit-all" class="pwb-btn">FULL BOARD</button>
+  </div>
+  <div id="legend" class="pwb-legend"></div>
+  <div class="pwb-hint">tap a section to zoom in · tap a photo to flip it<br />drag to pan · pinch or scroll to zoom</div>
+</div>
+<script>
+// IDAHO POWER BOARD — dataset.
+// Source: Ben's working intelligence file (compiled 12 Aug 2026, public
+// record only) plus a live verification pass run 15 Aug 2026. Everything
+// here is public-record research on public figures. Confidence travels
+// with each card: "verified", "partial", or "unverified".
+//
+// Verification pass highlights (15 Aug 2026):
+// - John Otter CONFIRMED as J.R. Simplot's grandson (son of Butch Otter
+//   and Gay Simplot; Simplot board since 2015). MSPC role is now Vice
+//   Chair, not treasurer.
+// - Todd Lakey CONFIRMED as both MDC counsel and sitting state senator.
+// - Cortney Liddiard CONFIRMED on the Idaho Park and Recreation Board.
+// - Rebecca Hupp CONFIRMED as the former Boise Airport Director.
+// - IYSA Executive Director is now Kevin Ireland (Craig Warner is out).
+// - Meridian P&R Seat 1 is Carrie Graeff; Gelsomino is the past chair.
+// - Dorothy Moon re-elected Idaho GOP chair June 2026 (~51%, near-runoff).
+// - Boise State joined the Pac-12 on 1 Jul 2026; Dickey extended to 2028-29.
+// - Labrador won the trans-athletes case at the US Supreme Court, Jul 2026.
+// - ACHD leadership flipped: Miranda Gold president, Pickering vice.
+// - West Ada: Bub's new contract is $250,822 + $20k/yr raises (top-paid in
+//   Idaho); trustees Frasure (chair), McCullough, Brown, Binetti, Ozuna.
+// - St. Luke's CEO: Chris Roth. YMCA CEO: David Duro. JKAF president:
+//   Jamie Jo Scott. Margaret Carmel left for the Anchorage Daily News.
+
+
+const SEGMENTS = [
+  {
+    id: "federal",
+    title: "The Federal Delegation",
+    blurb: "4R, 0D. Two Senate committee chairs and the man who runs the Forest Service.",
+    cols: 3, cx: 700, cy: 640,
+  },
+  {
+    id: "statehouse",
+    title: "The Statehouse",
+    blurb: "The governor, his most likely successor, and the leaders of both chambers.",
+    cols: 3, cx: 2350, cy: 660,
+  },
+  {
+    id: "movement",
+    title: "Party + Movement Right",
+    blurb: "IFF owns the legislative floor. IACI owns the executive. That is the equilibrium.",
+    cols: 3, cx: 3950, cy: 600,
+  },
+  {
+    id: "bsu",
+    title: "The Boise State Ring",
+    blurb: "The connective tissue. The 2025 presidential search committee is the establishment, enumerated.",
+    cols: 3, cx: 5500, cy: 640,
+  },
+  {
+    id: "money",
+    title: "The Money (Apex Capital)",
+    blurb: "Under 10 people can move nine-figure capital alone. None of them takes cold calls.",
+    cols: 4, cx: 850, cy: 2120,
+  },
+  {
+    id: "machine",
+    title: "The Money Machine",
+    blurb: "The verified PAC chain. Inaugural money recycled into primary attacks.",
+    cols: 3, cx: 2600, cy: 2060,
+  },
+  {
+    id: "establishment",
+    title: "IACI + Chamber Core",
+    blurb: "Ring 1 is 300 employers and 4 staff. Ring 2 is the one door that opens to anyone who pays.",
+    cols: 4, cx: 4300, cy: 2160,
+  },
+  {
+    id: "developers",
+    title: "The Builders",
+    blurb: "Land, fabs and 57% of the valley's new homes. Micron outweighs every politician.",
+    cols: 4, cx: 6100, cy: 2140,
+  },
+  {
+    id: "cityhalls",
+    title: "City Halls",
+    blurb: "Seven mayors. One is brand new, one is a caretaker, one is at war with his own council.",
+    cols: 4, cx: 800, cy: 3700,
+  },
+  {
+    id: "ground",
+    title: "Ground Level: Where Permission Is Granted",
+    blurb: "The state tier decides climate. These people decide what gets built on a specific piece of dirt.",
+    cols: 4, cx: 2750, cy: 3780,
+  },
+  {
+    id: "sports",
+    title: "The Sports Layer",
+    blurb: "The bodies every youth club, league and facility in Idaho must pass through.",
+    cols: 3, cx: 4600, cy: 3700,
+  },
+  {
+    id: "press",
+    title: "Connectors + Press",
+    blurb: "Paid to meet strangers. The only tier where a cold approach is expected behaviour.",
+    cols: 3, cx: 6100, cy: 3680,
+  },
+  {
+    id: "legacy",
+    title: "Legacy + Hidden Networks",
+    blurb: "Dynasties, the Basque network, and the wealth nothing public records.",
+    cols: 3, cx: 2750, cy: 5260,
+  },
+];
+
+const NODES = [
+  // ── FEDERAL ──────────────────────────────────────────────────────────
+  {
+    id: "crapo", kind: "person", name: "Mike Crapo", role: "US Senator",
+    org: "US Senate", tier: "S", segment: "federal", verification: "verified",
+    summary: "Chairs the Senate Finance Committee, arguably the most powerful committee chairmanship in Congress, held by an Idahoan.",
+    intel: [
+      "In the Senate since 1999; succeeded Kempthorne. Chair, Senate Finance since Jan 2025: all US tax law, Medicare, Medicaid, Social Security and trade.",
+      "Senate Republican Chief Deputy Whip since 2013. Former Banking chair 2017-21.",
+      "Idaho Senate President Pro Tem 1988-92, elected to that post when Risch unexpectedly lost his seat.",
+      "Next election 2028, term expires Jan 2029.",
+    ],
+    motive: "Institutional power fully achieved. Nothing an outsider offers moves him.",
+    play: "Not a target. Constituent-service channels only.",
+  },
+  {
+    id: "risch", kind: "person", name: "Jim Risch", role: "US Senator",
+    org: "US Senate", tier: "S", segment: "federal", verification: "verified",
+    summary: "Chairs Senate Foreign Relations. His seat is the trigger for the succession scenario everyone in Boise is watching.",
+    intel: [
+      "Senator since 2009; chairs Foreign Relations since Jan 2025 (third Idahoan ever, after Borah and Church). Also Energy, Intelligence, Small Business, Ethics.",
+      "Governor 2006-07; Lt. Governor twice; Little succeeded him as Lt. Governor.",
+      "Running in Nov 2026, Trump-endorsed; won the May primary 67.3%; faces David Roth (D). Would be 89 at term's end.",
+      "Publicly praised Michael Boren's USDA appointment.",
+      "Capital Sun scenario (labelled speculation): Risch takes an ambassadorship, Little appoints himself to the seat, Bedke ascends, Labrador is blocked.",
+    ],
+    motive: "Legacy and continued relevance at 83. The ambassadorship rumour is the lever others play around.",
+    play: "Not reachable directly. His movements matter more than his door.",
+  },
+  {
+    id: "simpson", kind: "person", name: "Mike Simpson", role: "US Rep, District 2",
+    org: "US House", tier: "A", segment: "federal", verification: "verified",
+    summary: "Controls the appropriations subcommittee that funds the Interior Department and the Forest Service, the agency Boren now runs.",
+    intel: [
+      "In the House since 1999, age 75, running for a 15th term. Chairs House Appropriations Subcommittee on Interior and Environment.",
+      "District 2 covers most of Boise, splits Ada County, spans central and eastern Idaho.",
+    ],
+    motive: "Seniority preservation. Appropriators trade in projects.",
+    play: "District office for anything with a federal-lands or funding angle.",
+  },
+  {
+    id: "fulcher", kind: "person", name: "Russ Fulcher", role: "US Rep, District 1",
+    org: "US House", tier: "B", segment: "federal", verification: "verified",
+    summary: "Safe seat covering western Idaho and the panhandle; the least leveraged member of the delegation.",
+    intel: [
+      "In office since 2019, age 63, seeking a fifth term. Won 67.7% last cycle; drew no Republican challenger at all in 2024.",
+    ],
+    play: "Low priority.",
+  },
+  {
+    id: "boren", kind: "person", name: "Michael Boren", role: "USDA Under Secretary (runs the US Forest Service)",
+    org: "USDA", tier: "S", segment: "federal", verification: "verified",
+    summary: "Boise billionaire-tier founder, personally close to Little, now runs the agency he clashed with. The single highest-leverage Idaho-to-Washington edge on this board.",
+    intel: [
+      "Co-founded Clearwater Analytics (Boise, 2004, IPO 2021) with brother David; also Sawtooth Investment Management and Clearwater Advisors. Six companies founded.",
+      "Confirmed 7 Oct 2025 on a party-line vote (only 5 of 23 Ag Committee members attended the hearing); took office ~Jan 2026. The role runs the US Forest Service: 193 million acres.",
+      "Little called him 'my friend Mike Boren' in the Governor's own press release. Praised by Risch.",
+      "Previously sat on the Idaho Park and Recreation Board, the same board Cortney Liddiard now sits on.",
+      "Controversy: built a private airstrip on his ranch inside the Sawtooth NRA, reportedly before permits (NYT, Jun 2025); later sued four critics for defamation; dismissed, appealed 2023.",
+      "Anything touching federal land, forest or fire in Idaho now routes through a man in Little's personal orbit.",
+    ],
+    motive: "Vindication and control of the terrain he lives on. A litigator by temperament; treat with care.",
+    play: "Not a target. Know the edge exists.",
+  },
+
+  // ── STATEHOUSE ───────────────────────────────────────────────────────
+  {
+    id: "little", kind: "person", name: "Brad Little", role: "Governor of Idaho",
+    org: "State of Idaho", tier: "S", segment: "statehouse", verification: "verified",
+    summary: "Third-generation rancher whose entire network is 20 years on the IACI board. Playing for legacy and an orderly exit.",
+    intel: [
+      "b. 1954, 72. Grandfather was the 'Idaho Sheep King'; father was a legislator and RNC committeeman.",
+      "Appointed at every rung: Idaho Senate 2001 (by Kempthorne), Lt. Gov 2009 (by Otter). 20 years on the IACI board, 1981-2001.",
+      "2018 primary: beat Labrador AND Ahlquist at once (37.3 / 32.6 / 26.2). 2022: beat McGeachin with Trump against him. 2026 primary: 58.96%, ~10x the field in money, ran no rallies and no debates.",
+      "General is 3 Nov 2026 vs Terri Pickens (D) and independent John Stegner (retired ID Supreme Court justice). Nothing moves before then.",
+      "Weak points: COVID lockdown never forgiven by the right; does not control the Legislature; 72 with no successor.",
+      "Idaho is one of two states with no officeholder financial disclosure; his is voluntary and only started after Ahlquist forced it in 2017.",
+      "Land Board 'Driggs 160' sale to donor Thomas Tull: legal open auction, fiduciary duty arguably required it, and the lessee backed Tull's purchase. What survives scrutiny is a process criticism (outlier sale, no recusal), not a corruption story.",
+    ],
+    motive: "Legacy and an orderly exit. Idaho Launch is the thing with his name on it. Watch the Senate self-appointment scenario.",
+    play: "The frame that works: keeping Idaho's kids in Idaho. He fought his own party for Idaho Launch on exactly that basis. No downside risk before 3 Nov.",
+  },
+  {
+    id: "labrador", kind: "person", name: "Raul Labrador", role: "Attorney General",
+    org: "State of Idaho", tier: "A", segment: "statehouse", verification: "verified",
+    summary: "The most likely successor pole of power in the state. Every public action is a 2030 positioning move.",
+    intel: [
+      "b. 1967, Puerto Rico; raised by a single mother in Las Vegas. LDS, BYU, U Washington law. Lives in Eagle.",
+      "US House 2011-19, founding member of the House Freedom Caucus. Chaired the Idaho GOP 2019-20.",
+      "2022: beat 5-term incumbent AG Wasden in the primary, ending the longest AG tenure in Idaho history.",
+      "JULY 2026: won Idaho's trans-athletes case at the US Supreme Court, six years after the fight began. Major stature boost.",
+      "In open institutional war with Little: litigating the Land Board's carve-out from AG representation, ongoing as of Aug 2026.",
+      "Raised $552,742 in 2026, second only to Little, in a race he is not seriously contested in. That is a 2030 war chest.",
+    ],
+    motive: "The governorship in 2030, and the need to be seen fighting. The lawsuit against the Land Board is a campaign asset.",
+    play: "If Little self-appoints to the Senate and Bedke gets incumbency, his path closes. The tension is real and will get worse.",
+  },
+  {
+    id: "bedke", kind: "person", name: "Scott Bedke", role: "Lieutenant Governor",
+    org: "State of Idaho", tier: "A", segment: "statehouse", verification: "verified",
+    summary: "The establishment's succession vehicle in the scenario everyone watches: Risch leaves, Little takes the Senate seat, Bedke ascends.",
+    intel: [
+      "Lt. Governor since Jan 2023; former Speaker of the Idaho House. Oakley rancher.",
+      "Running for re-election Nov 2026; unopposed in the May primary.",
+      "Called Kempthorne 'a political unicorn' at the funeral; spoke for the establishment lineage.",
+    ],
+    motive: "Governor without having to win an open primary against Labrador. The scenario does that for him.",
+    play: "Standard courtesy meeting via his office. Ranch and land credentials land well.",
+  },
+  {
+    id: "note-succession", kind: "note", name: "THE SUCCESSION FIGHT", role: "the scenario everyone in Boise watches",
+    segment: "statehouse", verification: "partial",
+    summary: "Speculation, explicitly labelled, but it explains the Little vs Labrador tension better than anything else.",
+    intel: [
+      "Step 1: Risch (83) takes a Trump ambassadorship, confirmed by his own committee.",
+      "Step 2: Little appoints himself to the vacated US Senate seat. A federal capstone at 72.",
+      "Step 3: Bedke ascends to governor with incumbency.",
+      "Step 4: Labrador's 2030 path closes.",
+      "Source: Idaho Capital Sun opinion column, labelled speculation. Treat as a lens, not a fact.",
+    ],
+  },
+  {
+    id: "moyle", kind: "person", name: "Mike Moyle", role: "Speaker of the Idaho House",
+    org: "Idaho Legislature", tier: "A", segment: "statehouse", verification: "verified",
+    summary: "14th-term Speaker from Star. The House is where the movement right actually governs.",
+    intel: [
+      "Speaker since Dec 2022; still Speaker through the 2026 session.",
+      "Targeted by a DC group ('Retire Career Politicians') at $76k spend.",
+      "2026: his bill to bar local officials from office for violating laws was rejected by the Senate.",
+    ],
+    play: "Approach through West Ada land and business interests; he is from Star, ground zero for growth.",
+  },
+  {
+    id: "anthon", kind: "person", name: "Kelly Anthon", role: "Senate President Pro Tem",
+    org: "Idaho Legislature", tier: "B", segment: "statehouse", verification: "verified",
+    summary: "Top Senate leadership since Dec 2024, elected alongside Den Hartog.",
+    intel: ["Rupert; elected President Pro Tem 5 Dec 2024 for the 2025-26 sessions."],
+  },
+  {
+    id: "den-hartog", kind: "person", name: "Lori Den Hartog", role: "Senate Majority Leader",
+    org: "Idaho Legislature", tier: "A", segment: "statehouse", verification: "verified",
+    summary: "Meridian senator actively trying to capture ACHD, the one genuinely independent body in the local permission chain.",
+    intel: [
+      "Senate Majority Leader since Dec 2024. R-Meridian.",
+      "SB 1356 (2026): would make ACHD elections partisan and county-wide from 2028. Passed Senate State Affairs 6-3 in March.",
+      "A 2025 bill already stripped ACHD's ability to reduce lanes, killing its State Street plan.",
+    ],
+    motive: "Control of road access for the fastest-growing county in the state.",
+    play: "Any facility play in Meridian eventually crosses her. Watch SB 1356's fate.",
+  },
+  {
+    id: "mcgrane", kind: "person", name: "Phil McGrane", role: "Secretary of State",
+    org: "State of Idaho", tier: "B", segment: "statehouse", verification: "verified",
+    summary: "Runs the Sunshine disclosure system this whole board is built from. Running unopposed-in-primary for re-election.",
+    intel: [
+      "R, re-election 2026 with no primary opponent.",
+      "sunshine.sos.idaho.gov (campaign finance, $1,000+ declared within 48 hours) and sunshine.voteidaho.gov/lobbyists (bulk download) are his office's tools. They are how you extend this board yourself.",
+    ],
+  },
+  {
+    id: "critchfield", kind: "person", name: "Debbie Critchfield", role: "Supt. of Public Instruction",
+    org: "State of Idaho", tier: "B", segment: "statehouse", verification: "verified",
+    summary: "Statewide education executive, seeking a second term. Sits where the school-choice money fight lands.",
+    intel: [
+      "In office since Jan 2023; announced re-election Jan 2026, no primary challenger; faces Becky Sundin (D) in November.",
+    ],
+  },
+
+  // ── MOVEMENT ─────────────────────────────────────────────────────────
+  {
+    id: "moon", kind: "person", name: "Dorothy Moon", role: "Chair, Idaho Republican Party",
+    org: "Idaho GOP", tier: "A", segment: "movement", verification: "verified",
+    summary: "Controls the party apparatus, aligned with the IFF wing against Little. Just survived a genuine challenge.",
+    intel: [
+      "b. 1958. ID House 2016-22. Chair since Jul 2022, replacing Tom Luna.",
+      "JUNE 2026: re-elected to a THIRD term at the Meridian convention with 306 votes, ~51%, narrowly avoiding a runoff against Steven Thayn and Mark Fuller. Her grip is real but no longer total.",
+    ],
+    motive: "Holding the party machinery for the movement wing through the 2026 cycle.",
+  },
+  {
+    id: "nate", kind: "person", name: "Ron Nate", role: "President, Idaho Freedom Foundation",
+    org: "IFF", tier: "A", segment: "movement", verification: "verified",
+    summary: "Runs the outfit that owns the legislative floor on a ~$1M budget. Some legislators vote the Freedom Index without reading bills.",
+    intel: [
+      "Economist, former 3-term state Rep (R-Rexburg), JFAC. President since Jan 2024.",
+      "Replaced founder Wayne Hoffman, who left amid an InvestigateWest expose on IFF contracting alt-right propagandist Dave Reilly, and a revelation he lived in Washington State.",
+      "Budget ~$833k revenue vs $1.07M expenses (2023). Punches far above it via attack-campaign fear.",
+    ],
+    motive: "Keeping legislators more afraid of the Freedom Index than of their voters.",
+  },
+  {
+    id: "maria-nate", kind: "person", name: "Maria Nate", role: "State Freedom Caucus Network + Idaho GOP secretary",
+    org: "SFCN / Idaho GOP", tier: "B", segment: "movement", verification: "verified",
+    summary: "The other half of a power couple spanning two organisations of the movement right.",
+    intel: ["Idaho state director of the State Freedom Caucus Network; secretary of the Idaho Republican Party. Married to Ron Nate."],
+  },
+  {
+    id: "regan", kind: "person", name: "Brent Regan", role: "IFF board chair + Kootenai County GOP chair",
+    org: "IFF", tier: "A", segment: "movement", verification: "verified",
+    summary: "Chairs IFF's board and the most powerful county party in the state at the same time.",
+    intel: ["Kootenai County GOP chair; IFF board chair, confirmed still in both seats Aug 2026."],
+  },
+  {
+    id: "org-iff", kind: "org", name: "Idaho Freedom Foundation", role: "The Freedom Index",
+    segment: "movement", verification: "verified",
+    summary: "Owns the legislative floor. The IACI score and the Freedom Index are near-inverse; one glance sorts any legislator into a faction.",
+    intel: [
+      "Founded 2009 by Wayne Hoffman. Small budget, outsized fear.",
+      "Has cited the 2015 LaBeau email for a decade as proof of an IACI board 'comfortable with the leverage they have enjoyed over the legislative process.'",
+    ],
+  },
+  {
+    id: "hoffman", kind: "person", name: "Wayne Hoffman", role: "IFF founder (out, 2023)",
+    org: "IFF", tier: "D", segment: "movement", verification: "verified",
+    summary: "Founded IFF and ran it 14 years. Gone, but the machine he built still sets the floor's fear index.",
+    intel: ["Left 2023 amid the Reilly contracting expose and the Inlander's revelation he lived in Washington State."],
+  },
+
+  // ── BOISE STATE RING ─────────────────────────────────────────────────
+  {
+    id: "org-bsu", kind: "org", name: "Boise State University", role: "The connective tissue",
+    segment: "bsu", verification: "verified",
+    summary: "Not IACI, not the Chamber: Boise State is where Boise business, politics and sport actually meet. Joined the Pac-12 on 1 Jul 2026.",
+    intel: [
+      "The 2025 presidential search committee enumerated the establishment in one public document: both mega-developers, the utility CEO, the Chamber CEO, the health insurer, the athletics apparatus.",
+      "Correction from self-audit: donor-stacked search committees are normal university practice. It is the best single public roster, not a hidden structure.",
+      "Officially joined the Pac-12 on 1 Jul 2026: national profile, bigger money, bigger rooms.",
+    ],
+  },
+  {
+    id: "hahn", kind: "person", name: "David Hahn", role: "President, Boise State",
+    org: "Boise State", tier: "B", segment: "bsu", verification: "partial",
+    summary: "Brand new, no Idaho network, and a need to show community connection fast. The most reachable senior figure in the state for the next 12 months.",
+    intel: [
+      "Approved by the State Board 1 Jul 2026; on campus ~10 Aug 2026. From the University of Arizona (engineering dean). Sole finalist after a 14-month vacancy.",
+      "Salary reported as $480k, highest in Idaho. Verification pass could not confirm the figure; treat as unconfirmed.",
+      "Search was paused Oct 2025 pending a law change keeping applicant names private; 7 withdrawn candidates returned under the new law.",
+      "He arrived owing his job to Turnbull, Ahlquist and Dickey.",
+    ],
+    motive: "His first win, visibly, in year one.",
+    play: "THE window: next 12 months, before his calendar calcifies. Community-facing wins are exactly what he needs.",
+    flags: ["$480k salary figure unconfirmed by live check"],
+  },
+  {
+    id: "dickey", kind: "person", name: "Jeramiah Dickey", role: "Athletic Director, Boise State",
+    org: "Boise State", tier: "B", segment: "bsu", verification: "verified",
+    summary: "The most important sports executive in Idaho, full stop. Just carried Boise State into the Pac-12.",
+    intel: [
+      "b. ~1982. Baylor Deputy AD, then Boise State 2021.",
+      "2025: NACDA AD of the Year AND Sports Business Journal AD of the Year. The hottest AD in the country.",
+      "Extension approved through 2028-29 (up to ~$5M). Led the Pac-12 entry effective 1 Jul 2026. Reads as staying, not leaving.",
+      "Co-chaired the presidential search that hired his own boss.",
+    ],
+    motive: "A bigger job, or being paid not to take one. Wants things that raise Boise State's national athletic profile this year.",
+    play: "Anything that adds to the Pac-12-era athletic profile. Foundation and booster channels, not cold email.",
+  },
+  {
+    id: "mohr", kind: "person", name: "Bruce Mohr", role: "Chairman, BSU Foundation",
+    org: "Boise State", tier: "B", segment: "bsu", verification: "verified",
+    summary: "Controls the booster and donor apparatus. Foundation plus athletics is where Boise business and Boise sport actually meet.",
+    intel: ["Chairs the Boise State University Foundation; sat on the presidential search."],
+  },
+  {
+    id: "liebich", kind: "person", name: "Kurt Liebich", role: "Idaho State Board of Education",
+    org: "State Board of Ed", tier: "B", segment: "bsu", verification: "verified",
+    summary: "Board-level access to every public institution in Idaho; vice-chaired the BSU search.",
+    intel: ["State Board member; vice-chair of the presidential search committee."],
+  },
+  {
+    id: "grow", kind: "person", name: "Lisa Grow", role: "President & CEO, IDACORP / Idaho Power",
+    org: "Idaho Power", tier: "B", segment: "bsu", verification: "verified",
+    summary: "Runs the regulated monopoly with a permanent legislative presence. Idaho Power money sits in the Victory Fund chain.",
+    intel: [
+      "CEO since Jun 2020, confirmed current (IDACORP board chair is Dennis L. Johnson, an independent director).",
+      "On the BSU presidential search committee. IACI donor. Idaho Power put $50k+ into the Idaho Victory Fund chain.",
+    ],
+  },
+  {
+    id: "reynoldson", kind: "person", name: "Mike Reynoldson", role: "Gov't affairs, Blue Cross of Idaho",
+    org: "Blue Cross of Idaho", tier: "B", segment: "bsu", verification: "verified",
+    summary: "Health-insurer government affairs; IACI orbit; sat on the BSU search.",
+    intel: ["Blue Cross of Idaho government affairs; BSU presidential search committee member."],
+  },
+  {
+    id: "note-search", kind: "note", name: "THE 2025 SEARCH COMMITTEE", role: "the establishment, enumerated",
+    segment: "bsu", verification: "verified",
+    summary: "One committee: Turnbull (chair), Liebich (vice), Ahlquist + Dickey (co-chairs), Grow, Meuleman, Reynoldson, Mohr, Linda Clark, Jennifer White.",
+    intel: [
+      "The valley's two biggest developers, the utility CEO, the Chamber CEO who came from the governor's office, the health insurer and the athletics apparatus, all hiring one university president.",
+      "Self-audit: this is normal university practice. Its value is as a roster, not a revelation.",
+    ],
+  },
+
+  // ── MONEY ────────────────────────────────────────────────────────────
+  {
+    id: "org-simplot", kind: "org", name: "J.R. Simplot Co.", role: "$11B revenue, 100% family stock",
+    segment: "money", verification: "verified",
+    summary: "The state's largest private fortune. Funds both political poles at $1,000 each: access maintenance, not preference.",
+    intel: [
+      "~$11B revenue, 18,000 employees, 9 countries. Family holds 100% of stock and five of nine board seats.",
+      "Board: Scott, Gay, Ted and J.D. Simplot, Garrett Lofto (CEO), Steve Beebe, Richard Hormaechea, John Otter, Terry Uhling.",
+      "Gave $1,000 each to Little AND Labrador's AG run. Staff-executed standing mandate. Do not read signal into it.",
+      "Restructuring and layoffs reported from mid-2025.",
+    ],
+    motive: "Continuity and invisibility. They are not a target, they are weather.",
+  },
+  {
+    id: "simplot-scott", kind: "person", name: "Scott Simplot", role: "Chairman, J.R. Simplot Co.",
+    org: "J.R. Simplot Co.", tier: "S", segment: "money", verification: "verified",
+    summary: "Removed his own father from the chairmanship. Not sentimental. No door: contact is through staff, always.",
+    intel: [
+      "b. 1947. U of Idaho, Wharton MBA. On the board since 1970, chairman since 2001.",
+      "Family net worth $10.9B (Forbes, Jun 2026), #50 America's richest families.",
+    ],
+    play: "None. S-tier is reached through B-tier, never directly.",
+  },
+  {
+    id: "gay-simplot", kind: "person", name: "Gay Simplot", role: "Board, J.R. Simplot Co.",
+    org: "J.R. Simplot Co.", tier: "A", segment: "money", verification: "verified",
+    summary: "J.R. Simplot's daughter, on the company board, and the former wife of Governor Butch Otter. The hinge of the dynasty edge.",
+    intel: [
+      "Married Butch Otter 1964-1992; four children. Sits on the Simplot board today.",
+      "Her son John Otter's board seat is a family seat: confirmed by the 15 Aug 2026 verification pass.",
+    ],
+  },
+  {
+    id: "lofto", kind: "person", name: "Garrett Lofto", role: "President & CEO, J.R. Simplot Co.",
+    org: "J.R. Simplot Co.", tier: "A", segment: "money", verification: "verified",
+    summary: "Not family: a career Simplot man from a Manitoba farm. The most senior corporate figure in a room a newcomer can actually join.",
+    intel: [
+      "Entire career at Simplot; ran the $2.5B AgriBusiness division 9 years; 7th CEO since Jack Simplot retired.",
+      "Sits on the Boise Metro Chamber board. That is the reachable surface of the Simplot machine.",
+    ],
+    play: "Chamber rooms. Never through the company.",
+  },
+  {
+    id: "jb-scott", kind: "person", name: "J.B. 'Joe' Scott", role: "Alscott Inc. + Albertson family money",
+    org: "Alscott / JKAF", tier: "S", segment: "money", verification: "verified",
+    summary: "Joe Albertson's grandson. The most aggressive private political money in Idaho. Funds things he holds equity in. Legal. It worked.",
+    intel: [
+      "Alscott = 8 entities at the same Boise address and phone as the foundation. Foundation pool ~$750M, ~$30-35M granted per year.",
+      "The K12 template: Alscott held K12 Inc. equity while the foundation funded Idaho's online-ed buildout; Alscott cleared $15M+ selling down. Wilforth was simultaneously Alscott partner, foundation CEO and K12 director.",
+      "$1M personal to Idaho Families PAC (Jan 2024). $250k defending the Luna laws. The Idaho Land Fund routing episode (2017).",
+      "Owns Shore Lodge, Whitetail Club, the Idaho Outdoor Fieldhouse, Kathryn Albertson Park, Boise skate parks. The only family here that builds sports facilities.",
+      "Note: JKAF's president and board chair is Jamie Jo Scott (confirmed active Jul 2026).",
+    ],
+    motive: "Education restructured, and he does not mind owning the pieces. Conviction plus capital efficiency. He does not do passive gifts.",
+    play: "A durable stake or a durable name in something aligned with his model. Never a passive ask.",
+  },
+  {
+    id: "jamie-jo-scott", kind: "person", name: "Jamie Jo Scott", role: "President & board chair, JKAF",
+    org: "JKAF", tier: "A", segment: "money", verification: "verified",
+    summary: "Runs the J.A. and Kathryn Albertson Family Foundation day to day: the ~$750M pool and its grantmaking.",
+    intel: [
+      "Confirmed president/chair and active as of Jul 2026 (jkaf.org).",
+      "The foundation's sports-facility record (Idaho Outdoor Fieldhouse, parks) runs through her office.",
+    ],
+    play: "The programmatic door to Albertson money. Grant conversations start here, not with J.B.",
+  },
+  {
+    id: "org-jkaf", kind: "org", name: "JKAF", role: "J.A. & Kathryn Albertson Family Foundation",
+    segment: "money", verification: "verified",
+    summary: "~$750M pool, $30-35M a year, and the only foundation on this board that builds sports facilities.",
+    intel: [
+      "Built the Idaho Outdoor Fieldhouse (general contractor: ESI Construction, who sit on the Chamber board).",
+      "The K12 grant history is the proof of the operating pattern: fund the model, hold the equity, believe in both.",
+    ],
+  },
+  {
+    id: "brian-scott", kind: "person", name: "Brian Scott", role: "VP Alscott, real estate",
+    org: "Alscott", tier: "B", segment: "money", verification: "verified",
+    summary: "Fourth-generation Albertson money, working the real estate side.",
+    intel: ["Son of J.B. Scott; VP at Alscott."],
+  },
+  {
+    id: "vandersloot", kind: "person", name: "Frank VanderSloot", role: "Founder, Melaleuca",
+    org: "Melaleuca", tier: "S", segment: "money", verification: "verified",
+    summary: "$3.2B, Idaho Falls. The largest R donor in eastern Idaho, not a Treasure Valley player.",
+    intel: ["Melaleuca gave $10k to Little. Longtime adversary of IFF-aligned attorney Bryan Smith."],
+  },
+  {
+    id: "tull", kind: "person", name: "Thomas Tull", role: "Billionaire, Tetonia",
+    org: "TWG Global", tier: "S", segment: "money", verification: "verified",
+    summary: "Legendary Entertainment founder. Bought the Driggs 160 at auction after $135k to Little vehicles. Donor, not operator, in Idaho.",
+    intel: [
+      "~$1B+; TWG Global co-chair. National donor who gives across many states, including to Democrats (largest single Victory Fund donation traces to Greg Wendt, a major Biden donor).",
+      "Self-audit: the land sale survives as a process criticism only; the dispossessed lessee publicly supported Tull's purchase and Tull restored the grazing lease.",
+    ],
+  },
+  {
+    id: "david-boren", kind: "person", name: "David Boren", role: "Co-founder, Clearwater Analytics",
+    org: "Clearwater Analytics", tier: "A", segment: "money", verification: "verified",
+    summary: "The Boren brother who stayed in Boise. Clearwater is the valley's biggest bootstrapped financial exit.",
+    intel: [
+      "Co-founded Clearwater Analytics (2004, IPO Sep 2021, ~1,900 staff) and Sawtooth Investment Management with brother Michael, now at USDA.",
+      "Clearwater is a Chamber advisor member; a 2013 partnership with Gardner Co. ties it to Ahlquist's old firm.",
+    ],
+  },
+  {
+    id: "jacksons", kind: "person", name: "Jackson family", role: "Jacksons Food Stores (John D. & Cory Jackson)",
+    org: "Jacksons", tier: "A", segment: "money", verification: "verified",
+    summary: "~300 stores across 7 states, HQ Meridian, and structurally invisible: no foundation, no PACs, no press. The most under-mapped fortune in the valley.",
+    intel: [
+      "Founded 1975 in Caldwell with one Texaco. Bought 7-Eleven locations in 2021.",
+      "Private, family-held. Nothing public records them; that is a choice.",
+    ],
+  },
+  {
+    id: "note-quiet-money", kind: "note", name: "THE INVISIBLE WEALTH", role: "$50M+ tier: read before citing",
+    segment: "money", verification: "unverified",
+    summary: "No verified list of $50M+ Idahoans exists or can be built from public sources. Every figure is an estimate. Placement is a hypothesis.",
+    intel: [
+      "Est. 200-400 households statewide; 120-200 in the valley.",
+      "Almost none of it is liquid: Turnbull's wealth is dirt, Carley's is buildings, Barton's is inventory. A $200M landholder may have less deployable cash than a $20M exited founder.",
+      "The largest unmapped category: agricultural landholders (potato, sugar beet, dairy, cattle). $50-300M balance sheets with zero civic footprint.",
+      "The visible ones are visible because they chose to be. The ones who opted out are the ones you would never know to look for.",
+    ],
+  },
+
+  // ── MONEY MACHINE ────────────────────────────────────────────────────
+  {
+    id: "pac-friends-little", kind: "pac", name: "Friends of Brad Little", role: "The governor's own committee",
+    segment: "machine", verification: "verified",
+    summary: "Seeded the Victory Fund with $500,000 in March 2023. Even his son and his inaugural committee fed the chain.",
+    intel: [
+      "$500,000 to Idaho Victory Fund, Mar 2023.",
+      "Adam Little (his own son): $1,000 into the Victory Fund. The Idaho Inaugural Committee donated into the chain too: inaugural money recycled into primary attacks.",
+    ],
+  },
+  {
+    id: "pac-victory-fund", kind: "pac", name: "Idaho Victory Fund", role: "The establishment's war chest",
+    segment: "machine", verification: "verified",
+    summary: "Donor roll is a who's-who: Tull $100k, Clearwater Paper $50k, Idaho Power, St. Luke's, Caleb Roope, corporate Idaho at $5k a head.",
+    intel: [
+      "Other donors: AUTOPAC $35k, Motor Vehicle Software $25k, Larsen Farms $20k, Amalgamated Sugar $5k, CoreCivic $1k, UnitedHealth, Lumen, DentaQuest, Cascadia Healthcare and more.",
+      "Spend: transfers to Liberty PAC, Boise Centre events, Moore Information polling, $25k RGA, $25k Idaho GOP, FP1 Strategies ads.",
+      "Gem State Chronicle searched Idaho SOS and IRS for its records and came up empty. Disclosure is partial.",
+      "Do not conflate Clearwater Paper (donor here) with Clearwater Analytics (the Borens).",
+    ],
+  },
+  {
+    id: "pac-liberty", kind: "pac", name: "Idaho Liberty PAC", role: "'Cover identity' attack vehicle",
+    segment: "machine", verification: "verified",
+    summary: "Received $1.43M from the Victory Fund. $884k+ spent since April, majority on negative campaigning. 6 of 9 backed candidates won.",
+    intel: ["Bare-bones website, one 15-second red-tape video. Built to spend, not to be seen."],
+  },
+  {
+    id: "pac-families", kind: "pac", name: "Idaho Families PAC", role: "J.B. Scott's $1M vehicle",
+    segment: "machine", verification: "verified",
+    summary: "The school-choice money's electoral arm, run by charter lobbyist Emily McClure. Gives to lawmakers of both parties.",
+    intel: ["$1,000,000 from J.B. Scott personally, Jan 2024."],
+  },
+  {
+    id: "mcclure", kind: "person", name: "Emily McClure", role: "Head, Idaho Families PAC",
+    org: "Idaho Families PAC", tier: "B", segment: "machine", verification: "verified",
+    summary: "Longtime charter-school lobbyist holding the pen on the biggest single personal cheque in Idaho politics.",
+    intel: ["Received J.B. Scott's $1M. Gives to lawmakers of both parties."],
+  },
+  {
+    id: "pac-land-fund", kind: "pac", name: "Idaho Land Fund", role: "Scott-linked routing vehicle",
+    segment: "machine", verification: "verified",
+    summary: "The 2017 routing episode: $100k to Forti's PAC, $91k refunded, a near-identical sum to Idaho First PAC launched 4 days before the refund.",
+    intel: ["Also gave $5,000 direct to Little."],
+  },
+  {
+    id: "note-sunshine", kind: "note", name: "HOW TO EXTEND THIS BOARD", role: "the tools",
+    segment: "machine", verification: "verified",
+    summary: "Idaho's disclosure regime captures almost nothing, but what it captures is searchable within 48 hours.",
+    intel: [
+      "sunshine.sos.idaho.gov: campaign finance by donor and candidate. $1,000+ declared within 48 hours.",
+      "sunshine.voteidaho.gov/lobbyists: lobbyist register, searchable, bulk download.",
+      "Self-audit: the register excludes salaries and retainers. The real money is in three unrecorded ledgers: gov-affairs payrolls, electoral money, and structural influence with no price tag.",
+      "Original reporting: BoiseDev, Idaho Capital Sun, Idaho EdNews, Gem State Chronicle.",
+    ],
+  },
+
+  // ── ESTABLISHMENT ────────────────────────────────────────────────────
+  {
+    id: "org-iaci", kind: "org", name: "IACI", role: "Idaho Assoc. of Commerce & Industry",
+    segment: "establishment", verification: "verified",
+    summary: "~300 employers, four staff, members employing half the state. Rates bills BEFORE the vote: an instruction, not a report card.",
+    intel: [
+      "Smallest possible org sitting on the biggest possible board. Chaired by Simplot's lobbyist.",
+      "Establishment-business R, not movement R: backed Medicaid expansion, promoted vaccines. The right calls it liberal.",
+      "After the 2015 email leak it rebranded: 'The Voice of Business in Idaho' became 'Employers advocating economic opportunity in Idaho.'",
+    ],
+  },
+  {
+    id: "labeau", kind: "person", name: "Alex LaBeau", role: "President, IACI",
+    org: "IACI", tier: "A", segment: "establishment", verification: "verified",
+    summary: "20 years running the executive branch's favourite pressure group. One leaked email in 20 years is a disciplined organisation, not a clean one.",
+    intel: [
+      "Twin Falls native. President since 2006, confirmed current Aug 2026.",
+      "THE 2015 EMAIL: profanity-laced reply about Sen. Siddoway, declaring a sitting committee chairman 'irrelevant' and proposing retaliation legislation. Offered to resign; chairman Mark Dunn (Simplot VP) refused it. Suspended, reinstated, rebranded.",
+      "IFF has used the email against IACI for a decade.",
+    ],
+    motive: "Staying feared while losing the floor to IFF. Fear requires timing; that is why he rates bills before votes.",
+  },
+  {
+    id: "dey", kind: "person", name: "Ken Dey", role: "Simplot gov't affairs | IACI chairman | MSPC chairman",
+    org: "J.R. Simplot Co.", tier: "B", segment: "establishment", verification: "verified",
+    summary: "The most connected staffer in the state: four nodes at once. He holds the relationships Simplot's equity cannot buy directly.",
+    intel: [
+      "Hired, not family. Ex-business reporter (Idaho Press, Statesman), ex-St. Luke's media, ex-Dept. of Commerce. At Simplot since 2016. Registered lobbyist.",
+      "Simultaneously: Simplot gov't affairs director, IACI chairman, Mountain States Policy Center board chairman, Boise Metro Chamber board member.",
+      "MSPC is deliberately non-electoral, framed as bringing 'adults into the room': a direct shot at IFF, rebuilding the establishment's intellectual counterweight.",
+    ],
+    motive: "Remaining the indispensable connector. Compounding access is the only currency a staffer has. Information is his product.",
+    play: "One of the highest-value handshakes on the board. He wants to know things first; bring him something.",
+  },
+  {
+    id: "hauge", kind: "person", name: "Zach Hauge", role: "Governor's office (ex IACI, ex campaign mgr)",
+    org: "Governor's office", tier: "B", segment: "establishment", verification: "verified",
+    summary: "IACI staffer, then Little's 2018 campaign manager, then the governor's office. The pipeline made flesh, and cc'd on the 2015 email.",
+    intel: [
+      "The clearest evidence the IACI-to-Governor pipeline is the same handful of people across a decade.",
+      "Spoke for Little on the financial-disclosure reversal.",
+    ],
+  },
+  {
+    id: "org-mspc", kind: "org", name: "Mountain States Policy Center", role: "The establishment's think tank",
+    segment: "establishment", verification: "verified",
+    summary: "Chairman: Simplot's lobbyist. Vice chair: a Simplot heir. A Simplot family vehicle in all but name; that read is now confirmed.",
+    intel: [
+      "Launched 2022, spinoff of Washington Policy Center. Offices Boise + Coeur d'Alene. 501(c)(3), deliberately no electoral arm.",
+      "Board: Ken Dey (chair), John Otter (vice chair since Dec 2023; treasurer at launch), William Junkermier (treasurer).",
+    ],
+  },
+  {
+    id: "cargill", kind: "person", name: "Chris Cargill", role: "President, MSPC",
+    org: "MSPC", tier: "C", segment: "establishment", verification: "verified",
+    summary: "Runs the establishment's new idea shop day to day.",
+    intel: ["From Washington Policy Center; runs Boise and Coeur d'Alene offices."],
+    play: "Think tanks need speakers, sponsors and case studies. An open door.",
+  },
+  {
+    id: "john-otter", kind: "person", name: "John Otter", role: "Simplot board | MSPC vice chair",
+    org: "J.R. Simplot Co.", tier: "A", segment: "establishment", verification: "verified",
+    summary: "CONFIRMED: J.R. Simplot's grandson (son of Butch Otter and Gay Simplot; middle name Simplot). His board seat is a family seat. Rarely visible, sits at the junction of legacy political capital and Simplot money.",
+    intel: [
+      "Verification pass, 15 Aug 2026: the Ever Onward podcast introduces him as J.R. Simplot's grandson and Butch Otter's son; Simplot board since 2015.",
+      "MSPC role updated: treasurer at the 2022 launch, Vice Chair since Dec 2023.",
+      "The consequence: the Otter political dynasty and the Simplot fortune are one entity, and the think tank's chair (Dey) is Simplot's lobbyist.",
+    ],
+  },
+  {
+    id: "org-chamber", kind: "org", name: "Boise Metro Chamber", role: "The one open door",
+    segment: "establishment", verification: "verified",
+    summary: "~2,000 members, 27 directors, ~150 pay-to-sit advisor companies. Committee chairs ARE the policy committee: a stated fact, not an inference.",
+    intel: [
+      "Idaho's only five-star accredited chamber. Parent of BOTH the Boise Valley Economic Partnership and Visit Boise.",
+      "Policy Committee meets weekly during session, closed to the public.",
+      "Exec committee: a Colliers broker chairs, a builder is chair-elect, a utility is treasurer, and the CEO came from the governor's office. Real estate runs this chamber.",
+      "Media inside the structure: Idaho EdNews and KTVB on the board, Statesman and Idaho Press as advisors. The exception: BoiseDev is absent entirely.",
+      "The Arid Club (Boise's oldest private club) is an advisor member: the chamber and the private-club layer are the same world.",
+    ],
+  },
+  {
+    id: "meuleman", kind: "person", name: "Bobbi-Jo Meuleman", role: "President & CEO, Boise Metro Chamber",
+    org: "Boise Metro Chamber", tier: "B", segment: "establishment", verification: "verified",
+    summary: "Went straight from Little's deputy chief of staff to running the Chamber. The IACI-to-Little pipeline made flesh, behind a door that opens to anyone who pays.",
+    intel: [
+      "CEO since Oct 2023, confirmed current. Sat on the BSU presidential search.",
+      "Leadership Boise: 2-year program, 1,800+ graduates since 1975, sponsored by CCDC. Explicitly a network-manufacturing machine.",
+    ],
+    play: "Membership, then the feeder programs, then a committee chair. Nobody skips the ladder; the ladder is public.",
+  },
+  {
+    id: "shipman", kind: "person", name: "Jim Shipman", role: "Chamber exec board chair (Colliers)",
+    org: "Colliers", tier: "B", segment: "establishment", verification: "verified",
+    summary: "A commercial real estate broker chairs the Chamber. Colliers and TOK are the two dominant CRE houses; both sit on the board.",
+    intel: ["Executive Board Chair 2026."],
+  },
+  {
+    id: "hupp", kind: "person", name: "Rebecca Hupp", role: "Chamber chair-elect (Austin Commercial)",
+    org: "Austin Commercial", tier: "B", segment: "establishment", verification: "verified",
+    summary: "CONFIRMED: 14 years as Boise Airport Director, stepped down Jun 2026, now VP Aviation at a national builder and next in line to chair the Chamber.",
+    intel: ["Boise-based for Austin Commercial (Dallas). The public-to-private revolving door, one person."],
+  },
+  {
+    id: "hunter", kind: "person", name: "Gerald Hunter", role: "Chamber exec cmte (Idaho Housing & Finance Assoc.)",
+    org: "IHFA", tier: "B", segment: "establishment", verification: "verified",
+    summary: "IHFA is quietly one of the largest financing entities in Idaho: bonds, tax credits, affordable-housing capital.",
+    intel: ["At-large on the Chamber executive committee."],
+  },
+  {
+    id: "mcfadyen", kind: "person", name: "David McFadyen", role: "President & CEO, Saint Alphonsus",
+    org: "Saint Alphonsus", tier: "B", segment: "establishment", verification: "verified",
+    summary: "Crossed from St. Luke's to Saint Al's; knows both machines. Cleaned up after Ahlquist's health play by rescuing Saltzer facilities.",
+    intel: [
+      "Treasure Valley raised, Boise State alum. System CEO after Odette Bolano retired; runs SARMC Boise, Nampa, two Oregon hospitals and Saint Agnes Fresno.",
+      "Sits on the Boise Metro Chamber board.",
+    ],
+  },
+  {
+    id: "roth", kind: "person", name: "Chris Roth", role: "President & CEO, St. Luke's Health System",
+    org: "St. Luke's", tier: "B", segment: "establishment", verification: "verified",
+    summary: "Runs Idaho's largest health system (gap filled by the 15 Aug check: CEO since Feb 2020, still current).",
+    intel: [
+      "St. Luke's is a Victory Fund donor and sits on the Chamber board via Sandee Gehrke; advocacy lead Jeff Cilek is on the IACI board.",
+      "Hospital gov't-affairs people are among the most networked figures in any state capital.",
+    ],
+  },
+  {
+    id: "note-entry-path", kind: "note", name: "THE ENTRY LADDER", role: "nobody skips it",
+    segment: "establishment", verification: "verified",
+    summary: "Chamber membership → BYP / Leadership Boise → committee chair (= policy committee seat) → Board of Advisors → Board of Directors → Executive Committee.",
+    intel: [
+      "Ahlquist climbed it with $1.6B of buildings. Dey climbed it with 20 years of staff work. Those are the only two routes: build something big enough that they invite you, or become indispensable to the people already inside.",
+      "Gatekeepers with names: Teresa Kirkmire (Board of Advisors), Tori Thomas (industry boards), both on the connectors segment.",
+    ],
+  },
+
+  // ── DEVELOPERS ───────────────────────────────────────────────────────
+  {
+    id: "ahlquist", kind: "person", name: "Tommy Ahlquist", role: "CEO, Ahlquist",
+    org: "Ahlquist", tier: "A", segment: "developers", verification: "verified",
+    summary: "ER doctor turned $1.6B developer who nearly became governor. Unfinished business drives everything he builds.",
+    intel: [
+      "b. 1968, LDS. 18 years an ER doctor, 45,000 patients. Retired from medicine 2014.",
+      "3.5M+ sq ft developed, 21 active projects. 2018: self-funded ~$2.57M, came third to Little. Left Gardner with five men and built BVA, rebranded Ahlquist 2024.",
+      "Bought Saltzer Health outright in 2019: a developer competing with the hospital systems.",
+      "BSU Foundation, co-chaired the presidential search, Chamber board. Reputation infrastructure: all the standing of office with none of the primary.",
+      "Publicly expects a recession; has paused approved towers. Disciplined, not a bull. Correct posture for buying distressed land later.",
+      "His core team, all reachable: Cody Mullins (brother-in-law), Ryan and Mark Cleverly, Holt Haga, Korey Hall.",
+    ],
+    motive: "To matter beyond buildings: to be the person who built the thing everyone points at.",
+    play: "Through the team, or through Boise State. A legacy-shaped project is the hook.",
+  },
+  {
+    id: "turnbull", kind: "person", name: "David Turnbull", role: "Executive Chairman, Brighton Corp",
+    org: "Brighton", tier: "A", segment: "developers", verification: "verified",
+    summary: "Bought hundreds of acres in the Great Recession; that land bank is the basis of West Ada's growth. The single most relevant philanthropic precedent for youth sports facilities.",
+    intel: [
+      "BYU finance, LDS mission Kobe. Relaunched Brighton 1992. 150+ staff, Meridian.",
+      "Donated the 22-acre site for The Hill (South Meridian YMCA + school) and chaired the YMCA fundraising committee. Amenity raises lot values across the holding: genuine generosity and precise commercial logic, simultaneously. It worked.",
+      "Sits on the Idaho State Board of Education (school capacity determines whether West Ada subdivisions sell). Chaired the BSU presidential search.",
+      "Brighton is Ahlquist's exclusive commercial partner on 360+ acres. Self-audit: aligned on specific parcels, not one entity.",
+      "Son Daniel Turnbull is a principal; Blake Alder president/CFO; Jon Wardle president of development.",
+    ],
+    motive: "The land bank monetised on his terms, and the terms are political.",
+    play: "THE template: The Hill. Anything that makes his remaining ground more desirable is a conversation he has had before, and said yes to.",
+  },
+  {
+    id: "barton", kind: "person", name: "Corey Barton", role: "Founder/Owner, CBH Homes",
+    org: "CBH Homes", tier: "A", segment: "developers", verification: "verified",
+    summary: "Idaho's #1 homebuilder 19 straight years, 57% market share, and the least institutionally gated principal at this scale in the valley.",
+    intel: [
+      "Capital High, Boise. Was racing dirt bikes in California when the construction boom caught him. Founded CBH 1992 with a pickup and a tool belt. 30,000+ homes.",
+      "Heavy visible sponsorship: Idaho Steelheads 'CBH Hockey House', Treasure Valley YMCA Love Run, Camp Rainbow Gold (6 ADA cabins in 3 days), $100k+ to a high school construction lab, Girl Scouts.",
+      "VP Ronda Conger: NAHB National Woman of the Year. New HQ under construction: 'The Starship.'",
+    ],
+    motive: "Volume and goodwill, in that order. Brand at the household level plus the labour pipeline he desperately needs.",
+    play: "Something visible, family-facing, associated with building. A self-made trades guy, not a boardroom figure: approach accordingly.",
+  },
+  {
+    id: "hawkins", kind: "person", name: "Gary Hawkins", role: "Hawkins Companies",
+    org: "Hawkins Companies", tier: "B", segment: "developers", verification: "verified",
+    summary: "Bench kid turned first-ever BoiseDev Developer of the Year. Led the winning group for the 44-acre former ITD campus.",
+    intel: [
+      "Retail and mixed-use: Bench, State Street, downtown, east Boise near Micron.",
+      "ITD site: won with Pacific Companies (Roope) and Utah's FJM against 9 bidders; details surfaced only under a Public Records Act request.",
+    ],
+  },
+  {
+    id: "carley", kind: "person", name: "Clay Carley", role: "Old Boise Development",
+    org: "Old Boise", tier: "B", segment: "developers", verification: "verified",
+    summary: "Downtown's dominant private landowner in the Old Boise Historic District. Sat on one site from 2009 until Micron's $15B announcement. Patient.",
+    intel: ["Owyhee Plaza revamp, Gibson Apartments, 5th & Idaho. Nearly everything within two blocks of 5th and Main."],
+  },
+  {
+    id: "roope", kind: "person", name: "Caleb Roope", role: "The Pacific Companies, Eagle",
+    org: "Pacific Companies", tier: "B", segment: "developers", verification: "verified",
+    summary: "Affordable-housing developer at national scale; Victory Fund donor; part of the winning ITD-site group.",
+    intel: ["Eagle-based. One of the quieter serious fortunes in the valley."],
+  },
+  {
+    id: "liddiard", kind: "person", name: "Cortney Liddiard", role: "Ret. CEO, Ball Ventures | Idaho Park & Rec Board",
+    org: "Ball Ventures", tier: "B", segment: "developers", verification: "verified",
+    summary: "CONFIRMED: Ahlquist's Idaho Falls capital partner sits on the state parks and recreation board (District 6, appointed Sep 2024).",
+    intel: [
+      "Ball Ventures backed Ahlquist's BVA. Also a Blue Cross of Idaho board member.",
+      "The state board he sits on oversees IDPR director Susan Buxton, and is the same board Michael Boren sat on before USDA.",
+    ],
+  },
+  {
+    id: "org-micron", kind: "org", name: "Micron", role: "$50B, 17,000 jobs, two fabs",
+    segment: "developers", verification: "verified",
+    summary: "The single biggest force acting on this valley, bigger than any politician. The threat of building elsewhere is permanent and unspoken.",
+    intel: [
+      "First Boise fab hit cleanroom blowdown spring 2026; second in ground prep. Pulled Lam Research into a new Boise office (~150 staff).",
+      "Gave $10k direct to Little. Named CWI's new building the Micron Academic Center (opens fall 2027).",
+      "Not philanthropy: pipeline. They cannot staff the fabs otherwise.",
+    ],
+  },
+  {
+    id: "gatzemeier", kind: "person", name: "Scott Gatzemeier", role: "Corp VP Front-End US Expansion, Micron",
+    org: "Micron", tier: "B", segment: "developers", verification: "verified",
+    summary: "Runs the Boise fab buildout day to day.",
+    intel: ["Corporate VP; the operational face of the $50B expansion."],
+  },
+  {
+    id: "arnzen", kind: "person", name: "April Arnzen", role: "Micron + Micron Foundation",
+    org: "Micron", tier: "B", segment: "developers", verification: "verified",
+    summary: "The Micron community-giving decision-maker, and a Chamber board seat. The name that was missing from the Micron card.",
+    intel: ["Chief people officer orbit; Micron Foundation is the door for community and education asks."],
+    play: "Anything workforce-flavoured (STEM, youth, families of fab workers) fits their one actual motive.",
+  },
+  {
+    id: "org-esi", kind: "org", name: "ESI Construction", role: "The sports-facility GC",
+    segment: "developers", verification: "verified",
+    summary: "Built the Albertson foundation's Idaho Outdoor Fieldhouse. The valley's sports-facility general contractor sits on the Chamber board (Neil Nelson).",
+    intel: ["If a serious indoor facility gets built in this valley, ESI has probably priced it."],
+  },
+
+  // ── CITY HALLS ───────────────────────────────────────────────────────
+  {
+    id: "mclean", kind: "person", name: "Lauren McLean", role: "Mayor of Boise",
+    org: "City of Boise", tier: "C", segment: "cityhalls", verification: "verified",
+    summary: "Appoints all nine CCDC commissioners. Her city has money and an 80% mandate for parks and open space.",
+    intel: [
+      "Beat 4-term incumbent Dave Bieter in a 2019 runoff; re-elected 2023; next race Nov 2027.",
+      "Council is stable and progressive: Nash (president), Hallyburton, Morales, all re-elected ~70% in Nov 2025.",
+      "2025 open space + parks levy passed with 80%+ support.",
+      "In open conflict with Labrador over the HB96 flag law.",
+    ],
+    play: "Parks money plus appetite for land acquisition. Sara Arkle (her new parks director) is the working-level door.",
+  },
+  {
+    id: "simison", kind: "person", name: "Robert Simison", role: "Mayor of Meridian",
+    org: "City of Meridian", tier: "C", segment: "cityhalls", verification: "verified",
+    summary: "The most important municipal executive for any West Ada land or facility play. Also sits on MDC's board himself.",
+    intel: [
+      "Re-elected 2023. Meridian's urban renewal agency is not independent of its city government in any practical sense: the mayor and a sitting councilman are both on the board.",
+      "Council: Whitlock, Strader, Taylor (also MDC), Overton, Anne Little Roberts (no relation to the Governor: checked), Cavener.",
+    ],
+  },
+  {
+    id: "bruner", kind: "person", name: "Darl Bruner", role: "Mayor of Nampa (caretaker to Nov 2027)",
+    org: "City of Nampa", tier: "C", segment: "cityhalls", verification: "verified",
+    summary: "Nampa is the most destabilised city in the valley: a caretaker executive and a fractured council for 18 months. Least-defended city on the board.",
+    intel: [
+      "Mayor Rick Hogaboam collapsed and died at a town hall, Mar 2026, ~70 days into his term. Council deadlocked for months, rejected both Debbie Kling and Clay Long, then appointed Bruner (retired NNU alumni relations director), sworn in 15 Jun 2026.",
+    ],
+  },
+  {
+    id: "phillips-eric", kind: "person", name: "Eric Phillips", role: "Mayor of Caldwell",
+    org: "City of Caldwell", tier: "C", segment: "cityhalls", verification: "verified",
+    summary: "New broom: beat an incumbent who faced a recall effort and a misuse-of-resources investigation.",
+    intel: ["Took office Jan 2026, defeating Jarom Wagoner."],
+  },
+  {
+    id: "pike", kind: "person", name: "Brad Pike", role: "Mayor of Eagle",
+    org: "City of Eagle", tier: "C", segment: "cityhalls", verification: "verified",
+    summary: "Eagle has the money and the worst internal politics: a mayor at war with a council none of whom supported his campaign.",
+    intel: [
+      "Former firefighter; administered CPR to Mayor Hogaboam.",
+      "Fighting his own council over hiring/firing powers and urban renewal board appointments.",
+    ],
+  },
+  {
+    id: "stear", kind: "person", name: "Joe Stear", role: "Mayor of Kuna",
+    org: "City of Kuna", tier: "C", segment: "cityhalls", verification: "verified",
+    summary: "Old-Kuna establishment governing an exploding city.",
+    intel: ["Kuna native since 1965; 37 years a local business owner; former council member and fire commissioner."],
+  },
+  {
+    id: "jacobs", kind: "person", name: "Bill Jacobs", role: "Mayor of Garden City",
+    org: "Garden City", tier: "C", segment: "cityhalls", verification: "verified",
+    summary: "First new mayor in two decades.",
+    intel: ["Garden City is the valley's odd pocket of light industrial and riverside redevelopment."],
+  },
+  {
+    id: "chadwick", kind: "person", name: "Trevor Chadwick", role: "Mayor of Star",
+    org: "City of Star", tier: "C", segment: "cityhalls", verification: "verified",
+    summary: "CONFIRMED current, second term. Star is Moyle country and growing at valley-leading speed.",
+    intel: ["Council approved raising the mayor's salary to $120,000 starting 2026: Star is becoming a real city."],
+  },
+  {
+    id: "arkle", kind: "person", name: "Sara Arkle", role: "Director, Boise Parks & Recreation",
+    org: "City of Boise", tier: "C", segment: "cityhalls", verification: "verified",
+    summary: "New in post (Sep 2025), building her own network right now, with levy money and a mandate behind her.",
+    intel: ["Selected by McLean, succeeding the retiring Doug Holloway."],
+    play: "New directors take meetings. This one has money.",
+  },
+  {
+    id: "note-boise-council", kind: "note", name: "BOISE COUNCIL + LEVY", role: "money and appetite",
+    segment: "cityhalls", verification: "verified",
+    summary: "Nash, Hallyburton and Morales all re-elected at ~70% in Nov 2025; the 2025 parks levy passed 80%+. The city can buy land and wants to.",
+    intel: ["Any Boise facility conversation starts from that mandate."],
+  },
+
+  // ── GROUND LEVEL ─────────────────────────────────────────────────────
+  {
+    id: "org-ccdc", kind: "org", name: "CCDC", role: "Boise urban renewal: ~$50M/yr",
+    segment: "ground", verification: "verified",
+    summary: "Boise's urban renewal agency: FY2026 budget ~$50.1M, 19 staff, nine commissioners all appointed by the mayor.",
+    intel: [
+      "Districts created under Brunelle: Gateway East, State Street, Shoreline. ParkBOI: 1M+ visits/yr.",
+      "Sponsors Leadership Boise, the Chamber's network machine.",
+      "Staff worth knowing: Doug Woodruff (development), Joey Chen (finance), Zach Piepmeyer (parking/mobility). Auditor: Eide Bailly.",
+    ],
+  },
+  {
+    id: "brunelle", kind: "person", name: "John Brunelle", role: "Exec Director, CCDC (RETIRING 30 SEP)",
+    org: "CCDC", tier: "B", segment: "ground", verification: "verified",
+    summary: "13 years running Boise's participation money. THE SEAT IS OPEN: no successor named as of mid-Aug 2026.",
+    intel: [
+      "Longest-serving director in CCDC's 62-year history. 2026 IBR ICON award.",
+      "Search run by Mosaic Public Partners; posting closed late June 2026, no hire announced. Whoever takes it controls $50M/yr of participation money.",
+      "The single most important personnel change on this board in 2026.",
+    ],
+    play: "Meet the successor in month one, whoever it is. New directors take meetings; this one controls money.",
+  },
+  {
+    id: "haney-keith", kind: "person", name: "Latonia Haney Keith", role: "Chair, CCDC Board",
+    org: "CCDC", tier: "B", segment: "ground", verification: "verified",
+    summary: "Chairs the board hiring the next executive director. Right now one of the most quietly consequential people in Boise.",
+    intel: ["Commissioners seen in minutes: Cooper, Stead, Perez, Alexander."],
+  },
+  {
+    id: "org-mdc", kind: "org", name: "Meridian Development Corp", role: "Meridian urban renewal (TIF x4 districts)",
+    segment: "ground", verification: "verified",
+    summary: "Nine commissioners, one administrator, no office. The mayor and a sitting councilman both sit on it: structurally non-independent of the city.",
+    intel: [
+      "Districts: Downtown, Ten Mile, Union, Northern Gateway. Meets 2nd Wed 7:30am and 4th Wed 4pm, all public.",
+      "Board: Dave Winder (chair), Nathan Mueller, Steve Vlassek, Dan Basalone, Doug Taylor (ALSO council seat 3), Rob McCarvel, Kit Fitzgerald, Brad Hoaglun, Mayor Simison.",
+      "Self-audit: the mailbox-only setup is cost control, not concealment. The real point is the non-independence.",
+      "Two people, Winder and Squyres, effectively set what this body considers.",
+    ],
+  },
+  {
+    id: "squyres", kind: "person", name: "Ashley Squyres", role: "Administrator, MDC",
+    org: "MDC", tier: "C", segment: "ground", verification: "verified",
+    summary: "SHE IS THE AGENCY. One person is the entire administrative interface to Meridian's urban renewal money; appointments are booked through her directly.",
+    intel: ["Confirmed still administrator (weakest sourcing in the verification set: documents current through Aug 2025 plus absence of change news)."],
+    play: "The shortest chain of command in the valley: one email.",
+  },
+  {
+    id: "winder", kind: "person", name: "Dave Winder", role: "Chairman, MDC",
+    org: "MDC", tier: "C", segment: "ground", verification: "verified",
+    summary: "Long-tenured chairman of the least-scrutinised money in Meridian.",
+    intel: ["Chairing since at least 2019."],
+  },
+  {
+    id: "lakey", kind: "person", name: "Todd Lakey", role: "MDC counsel + sitting state senator",
+    org: "Lakey Villegas Law", tier: "B", segment: "ground", verification: "verified",
+    summary: "CONFIRMED dual node: Meridian's urban-renewal counsel and an Idaho state senator (since 2012) at the same time. A significant land-use and legislative junction.",
+    intel: ["Meridian attorney (Lakey Villegas Law & Policy); Senate since 2012, first District 12 (Nampa), now District 23."],
+  },
+  {
+    id: "org-achd", kind: "org", name: "ACHD", role: "Every road decision in Ada County",
+    segment: "ground", verification: "verified",
+    summary: "The only body in the permission chain that is directly elected and genuinely independent, which is exactly why the Legislature is trying to capture it.",
+    intel: [
+      "Five non-partisan commissioners elected by district. No project gets built without an ACHD access approval.",
+      "SB 1356 (Den Hartog) would make its elections partisan and county-wide from 2028. A 2025 law already stripped its ability to reduce lanes.",
+      "Two seats (sub-districts 3 and 4) on the Nov 2026 ballot.",
+      "The documented nobody-to-elected route runs through its unpaid advisory groups: both Pickering and Gold came up that way.",
+    ],
+  },
+  {
+    id: "gold", kind: "person", name: "Miranda Gold", role: "President, ACHD",
+    org: "ACHD", tier: "C", segment: "ground", verification: "verified",
+    summary: "Now ACHD president (leadership flipped since the source file). Ex Eagle council + Eagle urban renewal; proof the volunteer-to-elected ladder works.",
+    intel: ["District 3. COMPASS board + finance committee. Twin Falls native, lives in Boise."],
+  },
+  {
+    id: "pickering", kind: "person", name: "Alexis Pickering", role: "Vice-President, ACHD",
+    org: "ACHD", tier: "C", segment: "ground", verification: "verified",
+    summary: "Came up through COMPASS workgroups to a county-wide seat. Safety and multimodal focus; the board is split.",
+    intel: ["District 2. Boise State BA/MA. Other commissioners: Nilsson (D1, retired city planner), Goldthorpe (D4), McKinney (D5)."],
+  },
+  {
+    id: "org-westada", kind: "org", name: "West Ada School District", role: "Idaho's largest district",
+    segment: "ground", verification: "verified",
+    summary: "38,906 students, 49 schools, $364.9M budget: physically bigger than Boise State. Volatile, under-watched, and its trustees are unpaid.",
+    intel: [
+      "Trustees (current): Lori Frasure (chair), Evelyn McCullough, Meghan Brown, David Binetti, Rene Ozuna (vice chair).",
+      "Voted 4-1 in Jun 2026 to leave the Idaho School Boards Association (4th district to go).",
+      "Athletic conference: Southern Idaho Conference 6A (IHSAA).",
+    ],
+  },
+  {
+    id: "bub", kind: "person", name: "Derek Bub", role: "Superintendent, West Ada",
+    org: "West Ada", tier: "C", segment: "ground", verification: "verified",
+    summary: "Idaho's top-paid superintendent: new contract at $250,822 with $20k annual raises, approved on the consent agenda.",
+    intel: ["Source file said $290,822; the live check found $250,822 + $20k/yr (Jun 2026, Idaho EdNews). Use the checked figure."],
+  },
+  {
+    id: "note-open-seats", kind: "note", name: "OPEN SEATS RIGHT NOW", role: "the lowest barriers on the board",
+    segment: "ground", verification: "verified",
+    summary: "Three Meridian Parks & Rec seats expire 31 Oct 2026. Appointments pass in batches on the consent agenda with no debate. Requirement: live there, apply.",
+    intel: [
+      "Meridian Parks & Rec Commission: seats 3, 4, 5 expiring (Nesmith, Dennington, Helms). Meets 2nd Wed 4pm. Seat 1 is Carrie Graeff (confirmed; Gelsomino is past chair).",
+      "Meridian Impact Fee Advisory Committee: shapes the per-unit fee formula developers pay toward parks. Structurally the highest-leverage volunteer seat in the valley and almost nobody wants it.",
+      "CCDC executive director: open until filled (see Brunelle).",
+      "ACHD sub-districts 3 + 4: on the Nov 2026 ballot.",
+      "IYSA executive director: JUST FILLED by Kevin Ireland; a new ED builds his network now.",
+    ],
+  },
+  {
+    id: "note-permission-chain", kind: "note", name: "THE PERMISSION CHAIN", role: "for any facility in Meridian",
+    segment: "ground", verification: "verified",
+    summary: "Land control → annexation/rezone (P&Z → Council) → ACHD access approval → impact fees → MDC participation (if in a district) → Parks & Rec → Council budget.",
+    intel: [
+      "The state tier decides climate. These bodies decide whether a specific thing gets built on a specific piece of dirt.",
+      "Most members are volunteers or part-timers appointed with near-zero scrutiny. The softest, most permeable layer on the entire board.",
+    ],
+  },
+
+  // ── SPORTS ───────────────────────────────────────────────────────────
+  {
+    id: "org-btt", kind: "org", name: "Boise Timbers | Thorns", role: "Idaho's largest youth club",
+    segment: "sports", verification: "verified",
+    summary: "40 years old, the valley's only Portland Timbers/Thorns alliance club, and owner of its only private 20-acre soccer complex.",
+    intel: [
+      "HQ Meridian. Runs 2 of Idaho's largest youth tournaments. Claims the most USSF A-licence coaches and most state titles in Idaho.",
+      "Weak signal: 78% recommend on 14 Facebook reviews. Thin, but noted.",
+      "Staff: Eric Simmonsen, Leslie Mathes, Brittany DeMartini. Directors: Kempe, Bodily, DeMartini, Green, Bray.",
+    ],
+  },
+  {
+    id: "org-acb", kind: "org", name: "Athletic Club Boise", role: "USL League One",
+    segment: "sports", verification: "verified",
+    summary: "7,208 average attendance in year one, best in the league. This ownership group has proven Boise turns out for soccer.",
+    intel: [
+      "Owners: Brad Stith, Steve Patterson, David Wali, Bill Taylor. Stadium at Expo Idaho (capacity 7,227, opened 4 Apr 2026).",
+      "Highest-value soccer-specific relationship on this board.",
+    ],
+    play: "Year-one clubs need community partners and youth pipelines. The window is open now.",
+  },
+  {
+    id: "ireland", kind: "person", name: "Kevin Ireland", role: "Executive Director, Idaho Youth Soccer Assoc.",
+    org: "IYSA", tier: "C", segment: "sports", verification: "verified",
+    summary: "NEW: replaced Craig Warner (the turnover the source file flagged has happened). Every club in Idaho passes through his body.",
+    intel: [
+      "IYSA is the state association: sanctioning, leagues, coaching education, referee development, tournaments.",
+      "A brand-new ED at the state association is a structural opening: he is building his own relationships right now.",
+      "Separate body: Idaho State Soccer Association runs State Cup and the referee committee.",
+    ],
+    play: "Cold approach is appropriate and timely. He needs allies more than anyone established does.",
+  },
+  {
+    id: "williams", kind: "person", name: "Chad Williams", role: "Executive Director, IHSAA",
+    org: "IHSAA", tier: "C", segment: "sports", verification: "verified",
+    summary: "Has held nearly every role in Idaho high school sport. Under pressure from superintendents and the Legislature both; stated priority is relationship building.",
+    intel: [
+      "171 member schools. Replaced Ty Jones 1 Jul (2025). Six years on the IHSAA board before the job.",
+      "Superintendents overrode the IHSAA board on classification; a 2021 bill would have stripped its authority (died in committee).",
+    ],
+  },
+  {
+    id: "hammons", kind: "person", name: "Julie Hammons", role: "Asst. Director + Soccer Director, IHSAA",
+    org: "IHSAA", tier: "C", segment: "sports", verification: "verified",
+    summary: "The single most targeted sports-administration contact in Idaho for soccer specifically.",
+    intel: ["Runs IHSAA soccer across 171 schools."],
+  },
+  {
+    id: "org-ymca", kind: "org", name: "Treasure Valley Family YMCA", role: "Largest non-school youth operator",
+    segment: "sports", verification: "verified",
+    summary: "20,000+ members at the West Branch alone, and already networked upward: Turnbull donated The Hill site, CBH runs the Love Run with them.",
+    intel: [
+      "Runs youth sports, child care, camps across the valley. Chamber advisor member.",
+      "The Hill (South Meridian YMCA) is the exact template for a land-plus-facility play in this valley.",
+    ],
+  },
+  {
+    id: "duro", kind: "person", name: "David Duro", role: "President & CEO, Treasure Valley Family YMCA",
+    org: "YMCA", tier: "C", segment: "sports", verification: "verified",
+    summary: "Gap filled by the 15 Aug check: Duro runs the valley's largest youth programming operator.",
+    intel: ["Leadership team includes CFO Liz Beem and CDO Meagan Ellis."],
+    play: "Partnership-shaped asks land well here; the YMCA already co-brands with CBH and Brighton money.",
+  },
+
+  // ── CONNECTORS + PRESS ───────────────────────────────────────────────
+  {
+    id: "krause", kind: "person", name: "Clark Krause", role: "Exec Director, Boise Valley Economic Partnership",
+    org: "BVEP", tier: "C", segment: "press", verification: "verified",
+    summary: "The single best cold-approach target on the entire board: his services are explicitly free, customised and confidential, and his job is meeting strangers.",
+    intel: [
+      "BVEP is a separately funded division of the Chamber covering 5 counties. 8 staff.",
+      "Career: Ford, Utah ski industry, Cedar City econ dev, President/CEO New Mexico Partnership (60+ companies, 15,000 jobs), then Boise.",
+      "Runs the BVEP Economic Summit: 500+ valley business leaders annually. Stakeholder tier ~$5,000/yr, the cheapest formal seat at the regional table.",
+      "Self-described: 'wants to be friends with everybody.' One hop from S-tier through the Chamber.",
+      "Team: Beth Ineck, Sierra White.",
+    ],
+    play: "Just call. This is the one door built for it.",
+  },
+  {
+    id: "day", kind: "person", name: "Don Day", role: "Founder, BoiseDev",
+    org: "BoiseDev", tier: "B", segment: "press", verification: "verified",
+    summary: "The most consequential journalist in the valley for development news, and deliberately OUTSIDE the Chamber structure entirely.",
+    intel: [
+      "Member-funded; aggressive with Public Records Act requests (broke the ITD site terms).",
+      "If a project is real, BoiseDev knows first.",
+      "Reporter Sydney Kidd covers development/growth. Margaret Carmel left in Apr 2026 for the Anchorage Daily News.",
+    ],
+    play: "Journalists are structurally obligated to take calls from strangers. Be a source, not a subject.",
+  },
+  {
+    id: "kidd", kind: "person", name: "Sydney Kidd", role: "BoiseDev, development & growth",
+    org: "BoiseDev", tier: "C", segment: "press", verification: "verified",
+    summary: "Ada County native on the beat that covers everything this board builds.",
+    intel: ["The working-level development reporter in the valley."],
+  },
+  {
+    id: "richert", kind: "person", name: "Kevin Richert", role: "Idaho EdNews",
+    org: "Idaho EdNews", tier: "C", segment: "press", verification: "verified",
+    summary: "The best campaign-finance analyst in the state.",
+    intel: ["Idaho EdNews colleague Nik Streng and Statesman's Becca Savransky cover education; EdNews itself sits on the Chamber board (Jennifer Swindell)."],
+  },
+  {
+    id: "almon", kind: "person", name: "Brian Almon", role: "Gem State Chronicle",
+    org: "Gem State Chronicle", tier: "C", segment: "press", verification: "verified",
+    summary: "Right-leaning, does serious PAC analysis. Found the Victory Fund's disclosure holes.",
+    intel: ["The IACI-vs-IFF scorecard analysis comes from here."],
+  },
+  {
+    id: "swanson", kind: "person", name: "Misty Swanson", role: "Exec Director, Idaho School Boards Assoc.",
+    org: "ISBA", tier: "C", segment: "press", verification: "verified",
+    summary: "Losing member districts (West Ada just left). Motivated to talk.",
+    intel: ["Kuna left a month before West Ada; 4 districts gone statewide."],
+  },
+  {
+    id: "kirkmire", kind: "person", name: "Teresa Kirkmire", role: "Boise Metro Chamber, Board of Advisors",
+    org: "Chamber", tier: "C", segment: "press", verification: "verified",
+    summary: "Handles Board of Advisors applications for anyone without an account manager. A named gatekeeper to the pay-to-sit tier.",
+    intel: ["'Reserve your seat at the table with our community's top decision makers.'"],
+  },
+  {
+    id: "thomas-tori", kind: "person", name: "Tori Thomas", role: "Boise Metro Chamber, Community Affairs",
+    org: "Chamber", tier: "C", segment: "press", verification: "verified",
+    summary: "Runs the four industry advisory boards: the gatekeeper to a paid seat in an industry room.",
+    intel: ["Quarterly boards, extra annual fee, educational speakers."],
+  },
+
+  // ── LEGACY ───────────────────────────────────────────────────────────
+  {
+    id: "butch-otter", kind: "person", name: "Butch Otter", role: "Governor 2007-2019",
+    org: "(retired)", tier: "A", segment: "legacy", verification: "verified",
+    summary: "Married into the Simplot family and worked for Simplot while Lt. Governor. The Otter dynasty and the Simplot fortune are the same entity, and that line runs to the sitting governor.",
+    intel: [
+      "b. 1942, Caldwell. Longest-serving Lt. Governor in Idaho history (1987-2001), US House 2001-07, Governor 2007-19. Remarried Lori Easley 2006.",
+      "Married Gay Simplot 1964-1992; their son John sits on the Simplot board today (confirmed).",
+      "In Jan 1989 Crapo acted as governor for 12 hours partly because Lt. Gov. Otter was out of state 'on business for his employer, Simplot.'",
+      "Appointed Little as Lt. Governor in 2009.",
+    ],
+  },
+  {
+    id: "kempthorne", kind: "person", name: "Dirk Kempthorne", role: "Mayor, Senator, Governor, Interior Sec.",
+    org: "(deceased)", tier: "S", segment: "legacy", verification: "verified", deceased: true,
+    summary: "Died 24 Apr 2026. The most complete CV in modern Idaho history, and the man who first appointed Little. The funeral itself was an intelligence document.",
+    intel: [
+      "Mayor of Boise 1986-93, US Senator 1993-99, Governor 1999-2006, Interior Secretary 2006-09.",
+      "Funeral attendees named in coverage: Little, Butch Otter, Risch, Bedke, Maj. Gen. Gary Sayler, Chuck Winder (spoke), Cherie Buckner-Webb (performed), widow Patricia Kempthorne.",
+      "Bedke: 'a political unicorn.'",
+    ],
+  },
+  {
+    id: "note-basque", kind: "note", name: "THE BASQUE NETWORK", role: "small, dense, intermarried, old",
+    segment: "legacy", verification: "verified",
+    summary: "One of the largest Basque communities outside Europe (~16,000), built on the same sheep industry as Little's own family. Not secretive: celebratory and public.",
+    intel: [
+      "Pete Cenarrusa: Secretary of State until 2003. Ben Ysursa: his Basque successor, until 2015. Two Basque Secretaries of State spanning 1967-2015.",
+      "Dave Bieter: 4-term Boise mayor, Cenarrusa's mentee; brother John Bieter at Boise State co-founded the Cenarrusa Foundation.",
+      "Institutions: Basque Museum, Basque Center (1949), the Basque Block, Jaialdi (every 5 years, one of the world's largest Basque festivals).",
+      "Surname markers: -aga, -eta, -rri, -ondo endings. Uberuaga, Ysursa, Cenarrusa, Bieter, Aldape, Eiguren, Bilbao.",
+    ],
+  },
+  {
+    id: "note-lobbying", kind: "note", name: "THE LOBBYING LEDGER", role: "what the register hides",
+    segment: "legacy", verification: "verified",
+    summary: "2026 session reported spend: $784,641 across 400+ lobbyists. Absurdly small, which tells you the disclosure regime captures almost nothing.",
+    intel: [
+      "Top reported spender: American Federation for Children (DeVos-founded, DC), $142,582 in 2026, $734k over 4 years, mostly mailers for HB 93 backers.",
+      "Its Boise lobbyist Jeremy Chou (Givens Pursley partner) ALSO represented the Legislature defending HB 93 at the Idaho Supreme Court. Upheld.",
+      "Education privatisation is the most heavily funded visible political project in the state: same fight as J.B. Scott's $1M.",
+      "Self-audit: AFC is the largest REPORTED spend, not the largest influence flow. Salaries, retainers and structural influence are three unrecorded ledgers, each bigger.",
+    ],
+  },
+  {
+    id: "note-unmapped", kind: "note", name: "STILL UNMAPPED", role: "the honest gaps",
+    segment: "legacy", verification: "unverified",
+    summary: "Real power layers with zero representation on this board so far. Absence here is a data gap, not an absence of power.",
+    intel: [
+      "Canyon County Hispanic business leadership: Nampa and Caldwell are heavily Hispanic, both just changed mayors, zero nodes mapped.",
+      "Coeur d'Alene Tribe and Shoshone-Bannock Tribes: casino revenue makes them among the state's larger donors. Unmapped.",
+      "LDS stake leadership: a genuine parallel network (Ahlquist, Labrador, Turnbull, Boren are all BYU/LDS) but ecclesiastical. Treat as terrain, not a target list.",
+      "Brighton/Ahlquist/CBH brokers, land-use counsel and lenders. Givens Pursley's full client roster. The Arid Club membership. Bronco Athletic Association leadership.",
+      "Agricultural land fortunes: the single largest unmapped wealth category in Idaho. Cannot be done from a desk.",
+    ],
+  },
+];
+
+const EDGES = [
+  // Appointment lineage (the spine of the establishment)
+  { from: "kempthorne", to: "little", label: "appointed to Idaho Senate, 2001", kind: "power" },
+  { from: "butch-otter", to: "little", label: "appointed Lt. Governor, 2009", kind: "power" },
+  { from: "risch", to: "little", label: "Little succeeded him as Lt. Gov", kind: "power" },
+  { from: "crapo", to: "kempthorne", label: "succeeded him in the US Senate", kind: "power" },
+  { from: "bedke", to: "little", label: "his Lt. Governor; heir in the scenario", kind: "job" },
+  { from: "little", to: "org-iaci", label: "20 years on the board, 1981-2001", kind: "job" },
+
+  // Conflicts
+  { from: "labrador", to: "little", label: "beaten 2018; now open institutional war (Land Board suit)", kind: "conflict" },
+  { from: "little", to: "ahlquist", label: "beat him, 2018 primary; Ahlquist forced his disclosure in 2017", kind: "conflict" },
+  { from: "moon", to: "little", label: "party apparatus aligned with IFF wing against him", kind: "conflict" },
+  { from: "org-iff", to: "org-iaci", label: "Freedom Index vs IACI score: near-inverse", kind: "conflict" },
+  { from: "org-mspc", to: "org-iff", label: "the establishment's answer to IFF", kind: "conflict" },
+  { from: "den-hartog", to: "org-achd", label: "SB 1356: partisan county-wide elections", kind: "conflict" },
+  { from: "labrador", to: "mclean", label: "HB96 flag law fight", kind: "conflict" },
+
+  // Family
+  { from: "butch-otter", to: "gay-simplot", label: "married 1964-1992, four children", kind: "family" },
+  { from: "john-otter", to: "butch-otter", label: "son", kind: "family" },
+  { from: "john-otter", to: "gay-simplot", label: "son; a Simplot heir (CONFIRMED 15 Aug 2026)", kind: "family" },
+  { from: "brian-scott", to: "jb-scott", label: "son; VP Alscott", kind: "family" },
+  { from: "jamie-jo-scott", to: "jb-scott", label: "family; runs the foundation", kind: "family" },
+  { from: "maria-nate", to: "nate", label: "married; SFCN + party secretary", kind: "family" },
+  { from: "david-boren", to: "boren", label: "brothers; co-founded Clearwater", kind: "family" },
+
+  // Simplot machine
+  { from: "simplot-scott", to: "org-simplot", label: "chairman; removed his own father", kind: "job" },
+  { from: "gay-simplot", to: "org-simplot", label: "board member", kind: "job" },
+  { from: "john-otter", to: "org-simplot", label: "board seat since 2015 (family seat)", kind: "job" },
+  { from: "lofto", to: "org-simplot", label: "CEO, not family", kind: "job" },
+  { from: "butch-otter", to: "org-simplot", label: "was employed by Simplot while Lt. Gov", kind: "job" },
+  { from: "dey", to: "org-simplot", label: "gov't affairs director, registered lobbyist", kind: "job" },
+
+  // IACI / MSPC / think-tank web
+  { from: "labeau", to: "org-iaci", label: "president, 20 years", kind: "job" },
+  { from: "dey", to: "org-iaci", label: "chairman", kind: "job" },
+  { from: "dey", to: "org-mspc", label: "board chairman", kind: "job" },
+  { from: "john-otter", to: "org-mspc", label: "vice chair (treasurer at launch)", kind: "job" },
+  { from: "cargill", to: "org-mspc", label: "president", kind: "job" },
+  { from: "nate", to: "org-iff", label: "president since 2024", kind: "job" },
+  { from: "regan", to: "org-iff", label: "board chair", kind: "job" },
+  { from: "hoffman", to: "org-iff", label: "founder, out 2023", kind: "job" },
+  { from: "hauge", to: "org-iaci", label: "ex-staffer; cc'd on the 2015 email", kind: "job" },
+  { from: "hauge", to: "little", label: "2018 campaign manager, then governor's office", kind: "job" },
+
+  // Chamber web
+  { from: "meuleman", to: "little", label: "was his deputy chief of staff", kind: "job" },
+  { from: "meuleman", to: "org-chamber", label: "president & CEO", kind: "job" },
+  { from: "lofto", to: "org-chamber", label: "board seat", kind: "job" },
+  { from: "dey", to: "org-chamber", label: "board seat (his 4th node)", kind: "job" },
+  { from: "shipman", to: "org-chamber", label: "executive board chair", kind: "job" },
+  { from: "hupp", to: "org-chamber", label: "chair-elect", kind: "job" },
+  { from: "hunter", to: "org-chamber", label: "exec committee", kind: "job" },
+  { from: "ahlquist", to: "org-chamber", label: "board of directors", kind: "job" },
+  { from: "arnzen", to: "org-chamber", label: "board (Micron Foundation)", kind: "job" },
+  { from: "mcfadyen", to: "org-chamber", label: "board (Saint Al's CEO)", kind: "job" },
+  { from: "krause", to: "org-chamber", label: "BVEP is a Chamber division", kind: "job" },
+  { from: "kirkmire", to: "org-chamber", label: "Board of Advisors gatekeeper", kind: "job" },
+  { from: "thomas-tori", to: "org-chamber", label: "industry boards gatekeeper", kind: "job" },
+  { from: "org-ccdc", to: "org-chamber", label: "sponsors Leadership Boise", kind: "money" },
+
+  // Boise State ring
+  { from: "turnbull", to: "org-bsu", label: "State Board of Ed; chaired the search", kind: "power" },
+  { from: "turnbull", to: "hahn", label: "chaired the committee that hired him", kind: "power" },
+  { from: "ahlquist", to: "org-bsu", label: "Foundation board; co-chaired the search", kind: "power" },
+  { from: "dickey", to: "org-bsu", label: "athletic director; Pac-12 architect", kind: "job" },
+  { from: "dickey", to: "hahn", label: "co-chaired the search for his own boss", kind: "power" },
+  { from: "hahn", to: "org-bsu", label: "president, Aug 2026", kind: "job" },
+  { from: "mohr", to: "org-bsu", label: "Foundation chairman", kind: "job" },
+  { from: "liebich", to: "org-bsu", label: "State Board; search vice-chair", kind: "power" },
+  { from: "grow", to: "org-bsu", label: "search committee", kind: "power" },
+  { from: "reynoldson", to: "org-bsu", label: "search committee", kind: "power" },
+  { from: "meuleman", to: "org-bsu", label: "search committee", kind: "power" },
+
+  // Money machine
+  { from: "little", to: "pac-friends-little", label: "his campaign committee", kind: "job" },
+  { from: "pac-friends-little", to: "pac-victory-fund", label: "$500,000, Mar 2023", kind: "money" },
+  { from: "pac-victory-fund", to: "pac-liberty", label: "$1.43M; majority spent on negative ads", kind: "money" },
+  { from: "tull", to: "pac-victory-fund", label: "$100,000", kind: "money" },
+  { from: "tull", to: "little", label: "$135k across three Little vehicles", kind: "money" },
+  { from: "grow", to: "pac-victory-fund", label: "Idaho Power: $50k+ into the chain", kind: "money" },
+  { from: "roth", to: "pac-victory-fund", label: "St. Luke's is a chain donor", kind: "money" },
+  { from: "roope", to: "pac-victory-fund", label: "named donor", kind: "money" },
+  { from: "jb-scott", to: "pac-families", label: "$1,000,000 personal, Jan 2024", kind: "money" },
+  { from: "pac-families", to: "mcclure", label: "run by", kind: "job" },
+  { from: "jb-scott", to: "pac-land-fund", label: "his vehicle (2017 routing episode)", kind: "money" },
+  { from: "pac-land-fund", to: "little", label: "$5,000 direct", kind: "money" },
+  { from: "org-micron", to: "little", label: "$10k direct", kind: "money" },
+  { from: "vandersloot", to: "little", label: "Melaleuca: $10k", kind: "money" },
+  { from: "org-simplot", to: "little", label: "$1,000 (and $1,000 to Labrador: access, not signal)", kind: "money" },
+
+  // Albertson / JKAF
+  { from: "jb-scott", to: "org-jkaf", label: "the family's political pole", kind: "family" },
+  { from: "jamie-jo-scott", to: "org-jkaf", label: "president & board chair", kind: "job" },
+  { from: "org-esi", to: "org-jkaf", label: "built the Idaho Outdoor Fieldhouse", kind: "job" },
+
+  // Developers
+  { from: "turnbull", to: "ahlquist", label: "exclusive commercial partner, 360+ acres (aligned, not merged)", kind: "job" },
+  { from: "liddiard", to: "ahlquist", label: "Ball Ventures backed BVA", kind: "money" },
+  { from: "mcfadyen", to: "ahlquist", label: "Saint Al's rescued Saltzer facilities after his health play", kind: "power" },
+  { from: "hawkins", to: "roope", label: "won the 44-acre ITD site together", kind: "job" },
+  { from: "gatzemeier", to: "org-micron", label: "runs the $50B fab buildout", kind: "job" },
+  { from: "arnzen", to: "org-micron", label: "Micron Foundation decision-maker", kind: "job" },
+  { from: "turnbull", to: "org-ymca", label: "donated 22 acres for The Hill; chaired fundraising", kind: "money" },
+  { from: "barton", to: "org-ymca", label: "Love Run partnership", kind: "money" },
+
+  // Federal edges
+  { from: "boren", to: "little", label: "'my friend Mike Boren' (Governor's own press release)", kind: "social" },
+  { from: "risch", to: "boren", label: "publicly praised his appointment", kind: "social" },
+  { from: "simpson", to: "boren", label: "chairs the subcommittee that funds his agency", kind: "power" },
+
+  // Ground level
+  { from: "mclean", to: "org-ccdc", label: "appoints all nine commissioners", kind: "power" },
+  { from: "brunelle", to: "org-ccdc", label: "exec director; retiring 30 Sep 2026", kind: "job" },
+  { from: "haney-keith", to: "org-ccdc", label: "board chair; hiring the successor", kind: "power" },
+  { from: "squyres", to: "org-mdc", label: "sole administrator", kind: "job" },
+  { from: "winder", to: "org-mdc", label: "chairman", kind: "job" },
+  { from: "simison", to: "org-mdc", label: "the mayor sits on this board", kind: "power" },
+  { from: "lakey", to: "org-mdc", label: "counsel (also a sitting state senator)", kind: "job" },
+  { from: "gold", to: "org-achd", label: "president", kind: "job" },
+  { from: "pickering", to: "org-achd", label: "vice-president", kind: "job" },
+  { from: "bub", to: "org-westada", label: "superintendent; top-paid in Idaho", kind: "job" },
+  { from: "arkle", to: "mclean", label: "her parks director, Sep 2025", kind: "power" },
+
+  // Sports
+  { from: "ireland", to: "org-btt", label: "IYSA sanctions every club in Idaho", kind: "power" },
+  { from: "hammons", to: "williams", label: "his soccer director", kind: "job" },
+  { from: "duro", to: "org-ymca", label: "president & CEO", kind: "job" },
+];
+
+/* IDAHO POWER BOARD — standalone app logic (no framework, no build).
+   Reads SEGMENTS / NODES / EDGES from data.js. */
+"use strict";
+
+/* ── layout ──────────────────────────────────────────────────────────── */
+
+const CARD_SIZE = {
+  person: { w: 224, h: 296 },
+  org: { w: 250, h: 190 },
+  pac: { w: 244, h: 172 },
+  note: { w: 250, h: 210 },
+};
+const CELL_W = 288;
+const CELL_H = 348;
+
+// Deterministic pseudo-random so pins land the same way on every load.
+function hash(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0) / 4294967295;
+}
+
+function placeNodes() {
+  const bySegment = new Map();
+  for (const n of NODES) {
+    if (!bySegment.has(n.segment)) bySegment.set(n.segment, []);
+    bySegment.get(n.segment).push(n);
+  }
+  const placed = [];
+  for (const seg of SEGMENTS) {
+    const list = bySegment.get(seg.id) || [];
+    const rows = Math.ceil(list.length / seg.cols);
+    list.forEach((node, i) => {
+      const col = i % seg.cols;
+      const row = Math.floor(i / seg.cols);
+      const rowLen = row === rows - 1 ? list.length - row * seg.cols : seg.cols;
+      const x0 = seg.cx - ((rowLen - 1) * CELL_W) / 2;
+      const y0 = seg.cy - ((rows - 1) * CELL_H) / 2;
+      const size = CARD_SIZE[node.kind];
+      const x = x0 + col * CELL_W + (hash(node.id + ":x") - 0.5) * 46;
+      const y = y0 + row * CELL_H + (hash(node.id + ":y") - 0.5) * 40;
+      placed.push(Object.assign({}, node, {
+        x, y, w: size.w, h: size.h,
+        rot: (hash(node.id + ":r") - 0.5) * 6.5,
+        pinX: x,
+        pinY: y - size.h / 2 + 14,
+      }));
+    });
+  }
+  return placed;
+}
+
+const SEG_PAD = 84;
+function computeSegmentBounds(placed) {
+  return SEGMENTS.map((seg) => {
+    const list = placed.filter((p) => p.segment === seg.id);
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const p of list) {
+      minX = Math.min(minX, p.x - p.w / 2);
+      minY = Math.min(minY, p.y - p.h / 2);
+      maxX = Math.max(maxX, p.x + p.w / 2);
+      maxY = Math.max(maxY, p.y + p.h / 2);
+    }
+    return {
+      id: seg.id,
+      x: minX - SEG_PAD,
+      y: minY - SEG_PAD - 34,
+      w: maxX - minX + SEG_PAD * 2,
+      h: maxY - minY + SEG_PAD * 2 + 34,
+    };
+  });
+}
+
+function computeWorldBounds(bounds) {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const b of bounds) {
+    minX = Math.min(minX, b.x);
+    minY = Math.min(minY, b.y);
+    maxX = Math.max(maxX, b.x + b.w);
+    maxY = Math.max(maxY, b.y + b.h);
+  }
+  const pad = 140;
+  return { x: minX - pad, y: minY - pad, w: maxX - minX + pad * 2, h: maxY - minY + pad * 2 };
+}
+
+/* ── constants ───────────────────────────────────────────────────────── */
+
+const EDGE_COLOR = {
+  money: "#c62f24",
+  power: "#dd9a2b",
+  family: "#3f74ad",
+  job: "#8a6a3c",
+  conflict: "#1d1712",
+  social: "#efe6cd",
+};
+const EDGE_NAME = {
+  money: "money",
+  power: "appointments + control",
+  family: "family",
+  job: "jobs + board seats",
+  conflict: "open conflict",
+  social: "friendship",
+};
+const KIND_WORD = {
+  money: "MONEY", power: "POWER", family: "FAMILY",
+  job: "ROLE", conflict: "CONFLICT", social: "TIES",
+};
+const VERIF_LABEL = {
+  verified: "VERIFIED · PUBLIC RECORD",
+  partial: "PARTLY VERIFIED",
+  unverified: "UNVERIFIED · DO NOT REPEAT",
+};
+
+/* ── data prep ───────────────────────────────────────────────────────── */
+
+const placed = placeNodes();
+const byId = new Map(placed.map((p) => [p.id, p]));
+const segBounds = computeSegmentBounds(placed);
+const world = computeWorldBounds(segBounds);
+
+const adjacency = new Map();
+for (const edge of EDGES) {
+  const a = byId.get(edge.from);
+  const b = byId.get(edge.to);
+  if (!a || !b) continue;
+  if (!adjacency.has(a.id)) adjacency.set(a.id, []);
+  if (!adjacency.has(b.id)) adjacency.set(b.id, []);
+  adjacency.get(a.id).push({ edge, other: b, outgoing: true });
+  adjacency.get(b.id).push({ edge, other: a, outgoing: false });
+}
+
+const stringPaths = EDGES.map((edge, i) => {
+  const a = byId.get(edge.from);
+  const b = byId.get(edge.to);
+  if (!a || !b) return null;
+  const dist = Math.hypot(b.pinX - a.pinX, b.pinY - a.pinY);
+  const sag = Math.min(110, 26 + dist * 0.07);
+  const mx = (a.pinX + b.pinX) / 2;
+  const my = (a.pinY + b.pinY) / 2 + sag;
+  return {
+    edge, a, b, i,
+    d: `M ${a.pinX} ${a.pinY} Q ${mx} ${my} ${b.pinX} ${b.pinY}`,
+    mx, my: my - sag / 2,
+  };
+}).filter(Boolean);
+
+/* ── DOM helpers ─────────────────────────────────────────────────────── */
+
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text != null) node.textContent = text;
+  return node;
+}
+
+function hueOf(id) {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return h % 360;
+}
+
+function initialsOf(name) {
+  const words = name.replace(/[^A-Za-z' ]/g, "").split(/\s+/).filter(Boolean);
+  if (!words.length) return "?";
+  const first = words[0][0] || "";
+  const last = words.length > 1 ? words[words.length - 1][0] || "" : "";
+  return (first + last).toUpperCase();
+}
+
+/* ── build the scene ─────────────────────────────────────────────────── */
+
+const viewport = document.getElementById("viewport");
+const worldEl = document.getElementById("world");
+const topbar = document.getElementById("topbar");
+
+// cork
+const cork = el("div", "pwb-cork");
+Object.assign(cork.style, {
+  left: world.x + "px", top: world.y + "px",
+  width: world.w + "px", height: world.h + "px",
+});
+worldEl.appendChild(cork);
+
+// segment zones + placards
+for (const b of segBounds) {
+  const seg = SEGMENTS.find((s) => s.id === b.id);
+  const area = el("div", "pwb-seg-area");
+  Object.assign(area.style, {
+    left: b.x + "px", top: b.y + "px", width: b.w + "px", height: b.h + "px",
+  });
+  area.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (suppressClick()) return;
+    closeNode();
+    zoomSegment(b.id);
+  });
+  worldEl.appendChild(area);
+
+  const label = el("div", "pwb-seg-label", seg.title);
+  label.appendChild(el("span", "pwb-seg-blurb", seg.blurb));
+  Object.assign(label.style, { left: b.x + b.w / 2 + "px", top: b.y - 32 + "px" });
+  label.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (suppressClick()) return;
+    closeNode();
+    zoomSegment(b.id);
+  });
+  worldEl.appendChild(label);
+}
+
+// strings
+const SVG_NS = "http://www.w3.org/2000/svg";
+const svg = document.createElementNS(SVG_NS, "svg");
+svg.setAttribute("class", "pwb-strings");
+svg.setAttribute("viewBox", `${world.x} ${world.y} ${world.w} ${world.h}`);
+Object.assign(svg.style, {
+  left: world.x + "px", top: world.y + "px",
+  width: world.w + "px", height: world.h + "px",
+});
+const strokeGroup = document.createElementNS(SVG_NS, "g");
+strokeGroup.style.filter = "drop-shadow(0 3px 2px rgba(10,4,0,0.4))";
+svg.appendChild(strokeGroup);
+worldEl.appendChild(svg);
+
+const pathEls = stringPaths.map((sp) => {
+  const path = document.createElementNS(SVG_NS, "path");
+  path.setAttribute("class", "pwb-string");
+  path.setAttribute("d", sp.d);
+  path.setAttribute("vector-effect", "non-scaling-stroke");
+  path.setAttribute("stroke", EDGE_COLOR[sp.edge.kind]);
+  path.setAttribute("stroke-width", "2.4");
+  if (sp.edge.kind === "conflict") path.setAttribute("stroke-dasharray", "12 8");
+  else if (sp.edge.unverified) path.setAttribute("stroke-dasharray", "4 7");
+  path.setAttribute("opacity", "0.7");
+  strokeGroup.appendChild(path);
+  return path;
+});
+
+let edgeLabelEls = [];
+
+// pins
+const nodeEls = new Map();
+for (const node of placed) {
+  const wrap = el("div", "pwb-node");
+  wrap.dataset.id = node.id;
+  Object.assign(wrap.style, {
+    left: node.x - node.w / 2 + "px",
+    top: node.y - node.h / 2 + "px",
+    width: node.w + "px",
+    height: node.h + "px",
+    zIndex: 10,
+    transform: `rotate(${node.rot}deg)`,
+  });
+
+  const flip = el("div", "pwb-flip");
+  const front = el("div", "pwb-face pwb-face-front");
+  front.appendChild(buildFront(node));
+  const back = el("div", "pwb-face pwb-face-back"); // filled lazily on open
+  flip.appendChild(front);
+  flip.appendChild(back);
+  wrap.appendChild(flip);
+
+  const pin = el("div", "pwb-pushpin" + (node.kind !== "person" ? " pwb-pin-" + node.kind : ""));
+  wrap.appendChild(pin);
+
+  wrap.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (suppressClick()) return;
+    if (openId !== node.id) openNode(node.id);
+  });
+
+  worldEl.appendChild(wrap);
+  nodeEls.set(node.id, { wrap, back });
+}
+
+function buildFront(node) {
+  if (node.kind === "person") {
+    const card = el("div", "pwb-polaroid" + (node.deceased ? " pwb-deceased" : ""));
+    if (node.tier) card.appendChild(el("span", "pwb-tier-stamp pwb-tier-" + node.tier, "TIER " + node.tier));
+    const photo = el("div", "pwb-photo");
+    const hue = hueOf(node.id);
+    const bg = el("div", "pwb-photo-bg");
+    bg.style.background =
+      `linear-gradient(160deg, hsl(${hue} 22% 46%), hsl(${hue} 30% 22%) 70%, hsl(${hue} 25% 14%))`;
+    photo.appendChild(bg);
+    photo.appendChild(el("span", "pwb-photo-initials", initialsOf(node.name)));
+    photo.appendChild(el("div", "pwb-photo-scanlines"));
+    if (node.deceased) photo.appendChild(el("span", "pwb-ribbon", "DECEASED"));
+    card.appendChild(photo);
+    card.appendChild(el("div", "pwb-name", node.name));
+    card.appendChild(el("div", "pwb-role", node.role));
+    return card;
+  }
+  if (node.kind === "org") {
+    const card = el("div", "pwb-folder");
+    card.appendChild(el("div", "pwb-name", node.name));
+    card.appendChild(el("div", "pwb-role", node.role));
+    card.appendChild(el("span", "pwb-folder-stamp", "CASE FILE"));
+    return card;
+  }
+  if (node.kind === "pac") {
+    const card = el("div", "pwb-index");
+    card.appendChild(el("div", "pwb-name", node.name));
+    card.appendChild(el("div", "pwb-role", node.role));
+    return card;
+  }
+  const card = el("div", "pwb-notecard");
+  card.appendChild(el("div", "pwb-name", node.name));
+  card.appendChild(el("div", "pwb-role", node.role));
+  card.appendChild(el("div", "pwb-note-summary", node.summary));
+  return card;
+}
+
+function buildBack(node) {
+  const dossier = el("div", "pwb-dossier");
+
+  const close = el("button", "pwb-dossier-close", "✕");
+  close.setAttribute("aria-label", "Close dossier");
+  close.addEventListener("click", (e) => { e.stopPropagation(); closeNode(); });
+  dossier.appendChild(close);
+
+  const head = el("div", "pwb-dossier-head");
+  const kicker = node.kind === "person"
+    ? "Dossier" + (node.tier ? " · Tier " + node.tier : "")
+    : node.kind === "org" ? "Case file"
+    : node.kind === "pac" ? "Money trail" : "Field note";
+  head.appendChild(el("div", "pwb-dossier-kicker", kicker));
+  head.appendChild(el("div", "pwb-dossier-name", node.name));
+  const roleLine = node.role +
+    (node.org && node.kind === "person" && !node.role.includes(node.org) ? " · " + node.org : "");
+  head.appendChild(el("div", "pwb-dossier-role", roleLine));
+  dossier.appendChild(head);
+
+  const body = el("div", "pwb-dossier-body");
+  body.addEventListener("wheel", (e) => e.stopPropagation());
+  body.appendChild(el("div", "pwb-sec", "The read"));
+  body.appendChild(el("div", "pwb-dossier-summary", node.summary));
+
+  if (node.intel && node.intel.length) {
+    body.appendChild(el("div", "pwb-sec", "Intel"));
+    for (const line of node.intel) body.appendChild(el("div", "pwb-fact", line));
+  }
+  if (node.motive) {
+    body.appendChild(el("div", "pwb-sec", "What they want"));
+    body.appendChild(el("div", "pwb-motive", node.motive));
+  }
+  if (node.play) {
+    body.appendChild(el("div", "pwb-sec", "The play"));
+    body.appendChild(el("div", "pwb-play", node.play));
+  }
+  if (node.flags && node.flags.length) {
+    body.appendChild(el("div", "pwb-sec", "Caution"));
+    for (const f of node.flags) body.appendChild(el("div", "pwb-flag", f));
+  }
+
+  const conns = adjacency.get(node.id) || [];
+  if (conns.length) {
+    body.appendChild(el("div", "pwb-sec", `Strings (${conns.length})`));
+    for (const { edge, other, outgoing } of conns) {
+      const btn = el("button", "pwb-conn-btn");
+      const kind = el("span", "pwb-conn-kind", "[" + KIND_WORD[edge.kind] + "]");
+      btn.appendChild(kind);
+      btn.appendChild(document.createTextNode(
+        " " + (outgoing ? "→" : "←") + " " + other.name +
+        (edge.label ? " · " + edge.label : "") +
+        (edge.unverified ? " (unverified)" : ""),
+      ));
+      btn.addEventListener("click", (e) => { e.stopPropagation(); openNode(other.id); });
+      body.appendChild(btn);
+    }
+  }
+
+  const verifWrap = el("div");
+  verifWrap.appendChild(el("span", "pwb-verif pwb-verif-" + node.verification, VERIF_LABEL[node.verification]));
+  body.appendChild(verifWrap);
+
+  dossier.appendChild(body);
+  return dossier;
+}
+
+/* ── camera ──────────────────────────────────────────────────────────── */
+
+const cam = { x: 0, y: 0, k: 0.12 };
+let glideTimer = null;
+
+function applyCam(glide) {
+  if (glide) {
+    worldEl.classList.add("pwb-glide");
+    clearTimeout(glideTimer);
+    glideTimer = setTimeout(() => worldEl.classList.remove("pwb-glide"), 700);
+  } else {
+    worldEl.classList.remove("pwb-glide");
+  }
+  worldEl.style.transform = `translate(${cam.x}px, ${cam.y}px) scale(${cam.k})`;
+}
+
+function fitRect(rx, ry, rw, rh, maxK, glide) {
+  const vw = viewport.clientWidth;
+  const vh = viewport.clientHeight;
+  const TOPBAR = (topbar ? topbar.offsetHeight : 80) + 8;
+  const ah = Math.max(120, vh - TOPBAR);
+  const k = Math.min(vw / rw, ah / rh, maxK == null ? 1.6 : maxK);
+  cam.k = k;
+  cam.x = vw / 2 - k * (rx + rw / 2);
+  cam.y = TOPBAR + ah / 2 - k * (ry + rh / 2);
+  applyCam(glide !== false);
+}
+
+function fitAll(glide) {
+  fitRect(world.x, world.y, world.w, world.h, 1.6, glide);
+}
+
+function zoomSegment(id) {
+  const b = segBounds.find((s) => s.id === id);
+  if (b) fitRect(b.x, b.y, b.w, b.h, 0.95);
+}
+
+function zoomToNode(node) {
+  const narrow = viewport.clientWidth < 640;
+  const w = Math.max(node.w, 340) + (narrow ? 56 : 280);
+  const h = Math.max(node.h, 440) + (narrow ? 120 : 300);
+  fitRect(node.x - w / 2, node.y - node.h / 2 - (narrow ? 50 : 110), w, h, 1.15);
+}
+
+/* ── open / close ────────────────────────────────────────────────────── */
+
+let openId = null;
+
+function openNode(id) {
+  const node = byId.get(id);
+  if (!node) return;
+  if (openId) restoreCard(openId);
+  openId = id;
+
+  const { wrap, back } = nodeEls.get(id);
+  if (!back.hasChildNodes()) back.appendChild(buildBack(node));
+  const w = Math.max(node.w, 340);
+  const h = Math.max(node.h, 440);
+  Object.assign(wrap.style, {
+    left: node.x - w / 2 + "px",
+    width: w + "px",
+    height: h + "px",
+    zIndex: 90,
+    transform: "rotate(0deg)",
+  });
+  wrap.classList.add("pwb-open");
+
+  refreshHighlights();
+  zoomToNode(node);
+}
+
+function restoreCard(id) {
+  const node = byId.get(id);
+  const entry = nodeEls.get(id);
+  if (!node || !entry) return;
+  entry.wrap.classList.remove("pwb-open");
+  Object.assign(entry.wrap.style, {
+    left: node.x - node.w / 2 + "px",
+    width: node.w + "px",
+    height: node.h + "px",
+    zIndex: 10,
+    transform: `rotate(${node.rot}deg)`,
+  });
+}
+
+function closeNode() {
+  if (!openId) return;
+  restoreCard(openId);
+  openId = null;
+  refreshHighlights();
+}
+
+function refreshHighlights() {
+  const linked = new Set();
+  if (openId) for (const c of adjacency.get(openId) || []) linked.add(c.other.id);
+
+  for (const [id, { wrap }] of nodeEls) {
+    wrap.classList.toggle("pwb-dim", openId !== null && id !== openId && !linked.has(id));
+    wrap.classList.toggle("pwb-linked", linked.has(id) && id !== openId);
+  }
+
+  stringPaths.forEach((sp, i) => {
+    const active = openId !== null && (sp.a.id === openId || sp.b.id === openId);
+    const faded = openId !== null && !active;
+    pathEls[i].setAttribute("stroke-width", active ? "4" : "2.4");
+    pathEls[i].setAttribute("opacity", faded ? "0.08" : active ? "1" : "0.7");
+  });
+
+  for (const lbl of edgeLabelEls) lbl.remove();
+  edgeLabelEls = [];
+  if (openId) {
+    for (const sp of stringPaths) {
+      if ((sp.a.id !== openId && sp.b.id !== openId) || !sp.edge.label) continue;
+      const lbl = el("div", "pwb-edge-label", sp.edge.label);
+      Object.assign(lbl.style, { left: sp.mx + "px", top: sp.my + "px" });
+      worldEl.appendChild(lbl);
+      edgeLabelEls.push(lbl);
+    }
+  }
+}
+
+/* ── gestures ────────────────────────────────────────────────────────── */
+
+const pointers = new Map();
+let pinch0 = null;
+let lastPt = null;
+let dragged = false;
+
+// A drag must not register as a click on whatever is under the pointer.
+function suppressClick() {
+  if (dragged) { dragged = false; return true; }
+  return false;
+}
+
+viewport.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  const rect = viewport.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  const factor = Math.exp(-e.deltaY * (e.ctrlKey ? 0.006 : 0.0016));
+  const nk = Math.min(2.2, Math.max(0.05, cam.k * factor));
+  cam.x = mx - ((mx - cam.x) * nk) / cam.k;
+  cam.y = my - ((my - cam.y) * nk) / cam.k;
+  cam.k = nk;
+  applyCam(false);
+}, { passive: false });
+
+viewport.addEventListener("pointerdown", (e) => {
+  // NO pointer capture: it would retarget the eventual click to the
+  // viewport, so taps on cards would never flip them.
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  dragged = false;
+  if (pointers.size === 1) {
+    lastPt = { x: e.clientX, y: e.clientY };
+    viewport.classList.add("pwb-dragging");
+  } else if (pointers.size === 2) {
+    const pts = Array.from(pointers.values());
+    pinch0 = {
+      d: Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y),
+      mx: (pts[0].x + pts[1].x) / 2,
+      my: (pts[0].y + pts[1].y) / 2,
+      cam: { x: cam.x, y: cam.y, k: cam.k },
+    };
+  }
+});
+
+window.addEventListener("pointermove", (e) => {
+  if (!pointers.has(e.pointerId)) return;
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pointers.size === 2 && pinch0) {
+    const pts = Array.from(pointers.values());
+    const d = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+    const mx = (pts[0].x + pts[1].x) / 2;
+    const my = (pts[0].y + pts[1].y) / 2;
+    const nk = Math.min(2.2, Math.max(0.05, pinch0.cam.k * (d / Math.max(1, pinch0.d))));
+    cam.k = nk;
+    cam.x = mx - ((pinch0.mx - pinch0.cam.x) * nk) / pinch0.cam.k;
+    cam.y = my - ((pinch0.my - pinch0.cam.y) * nk) / pinch0.cam.k;
+    dragged = true;
+    applyCam(false);
+  } else if (pointers.size === 1 && lastPt) {
+    const dx = e.clientX - lastPt.x;
+    const dy = e.clientY - lastPt.y;
+    if (Math.abs(dx) + Math.abs(dy) > 3) dragged = true;
+    lastPt = { x: e.clientX, y: e.clientY };
+    cam.x += dx;
+    cam.y += dy;
+    applyCam(false);
+  }
+});
+
+function endPointer(e) {
+  pointers.delete(e.pointerId);
+  if (pointers.size < 2) pinch0 = null;
+  if (pointers.size === 1) lastPt = Array.from(pointers.values())[0];
+  if (pointers.size === 0) {
+    lastPt = null;
+    viewport.classList.remove("pwb-dragging");
+  }
+}
+window.addEventListener("pointerup", endPointer);
+window.addEventListener("pointercancel", endPointer);
+
+viewport.addEventListener("click", () => {
+  if (suppressClick()) return;
+  closeNode();
+});
+
+window.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeNode();
+});
+window.addEventListener("resize", () => { if (!openId) fitAll(false); });
+
+/* ── chrome ──────────────────────────────────────────────────────────── */
+
+const searchInput = document.getElementById("search");
+const searchResults = document.getElementById("search-results");
+
+function renderResults() {
+  const q = searchInput.value.trim().toLowerCase();
+  searchResults.textContent = "";
+  if (q.length < 2) { searchResults.style.display = "none"; return; }
+  const matches = placed.filter((p) =>
+    p.name.toLowerCase().includes(q) ||
+    p.role.toLowerCase().includes(q) ||
+    (p.org || "").toLowerCase().includes(q) ||
+    p.summary.toLowerCase().includes(q),
+  );
+  // Name hits outrank role/org hits, which outrank summary mentions, so
+  // searching "boren" surfaces Michael Boren above cards that mention him.
+  const rank = (p) => {
+    const name = p.name.toLowerCase();
+    if (name.startsWith(q)) return 0;
+    if (name.includes(q)) return 1;
+    if (p.role.toLowerCase().includes(q) || (p.org || "").toLowerCase().includes(q)) return 2;
+    return 3;
+  };
+  matches.sort((a, b) => rank(a) - rank(b));
+  matches.splice(12);
+  if (!matches.length) { searchResults.style.display = "none"; return; }
+  for (const m of matches) {
+    const item = el("button", "pwb-search-item", m.name);
+    item.appendChild(el("small", null, m.role));
+    item.addEventListener("click", () => {
+      searchInput.value = "";
+      renderResults();
+      openNode(m.id);
+    });
+    searchResults.appendChild(item);
+  }
+  searchResults.style.display = "block";
+}
+searchInput.addEventListener("input", renderResults);
+
+document.getElementById("fit-all").addEventListener("click", () => {
+  closeNode();
+  fitAll(true);
+});
+
+const legend = document.getElementById("legend");
+for (const kind of Object.keys(EDGE_COLOR)) {
+  const row = el("div", "pwb-legend-row");
+  const swatch = el("span", "pwb-legend-swatch");
+  swatch.style.background = kind === "conflict"
+    ? `repeating-linear-gradient(90deg, ${EDGE_COLOR[kind]} 0 6px, transparent 6px 10px)`
+    : EDGE_COLOR[kind];
+  row.appendChild(swatch);
+  row.appendChild(document.createTextNode(EDGE_NAME[kind]));
+  legend.appendChild(row);
+}
+
+/* ── go ──────────────────────────────────────────────────────────────── */
+
+fitAll(false);
+
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js").catch(function () {});
+}
+</script>
+</body>
+</html>
