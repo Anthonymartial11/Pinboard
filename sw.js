@@ -13,7 +13,7 @@
 // that private. The worker now caches ONLY the app shell listed below.
 // Anything not on this list is passed straight through to the network and is
 // never written to storage.
-const CACHE = "argus-v5";
+const CACHE = "argus-v6";
 const ASSETS = ["./", "./index.html", "./manifest.json", "./icon-512.png", "./icon-192.png"];
 
 // Same-origin app-shell paths only. Compared against the resolved pathname so
@@ -61,6 +61,9 @@ self.addEventListener("fetch", (e) => {
         }
         return res;
       })
-      .catch(() => caches.match(e.request, { ignoreSearch: true })),
+      // Offline fallback. parcels.enc is matched EXACTLY (query included):
+      // its URL carries a content version, and serving a different version
+      // than the page expects would fail decryption rather than degrade.
+      .catch(() => caches.match(e.request, { ignoreSearch: !/\/parcels\.enc$/.test(new URL(e.request.url).pathname) })),
   );
 });
