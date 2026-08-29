@@ -13,14 +13,14 @@
 // that private. The worker now caches ONLY the app shell listed below.
 // Anything not on this list is passed straight through to the network and is
 // never written to storage.
-const CACHE = "powerboard-v4";
-const ASSETS = ["./", "./index.html", "./manifest.json", "./icon-512.png"];
+const CACHE = "argus-v5";
+const ASSETS = ["./", "./index.html", "./manifest.json", "./icon-512.png", "./icon-192.png"];
 
 // Same-origin app-shell paths only. Compared against the resolved pathname so
 // a query string cannot smuggle a non-shell URL past the check.
 // parcels.enc is on this list deliberately: it is encrypted at rest, so a
 // cached copy discloses nothing, and caching it keeps the map working offline.
-const SHELL = new Set(["/", "/index.html", "/manifest.json", "/icon-512.png", "/parcels.enc"]);
+const SHELL = new Set(["/", "/index.html", "/manifest.json", "/icon-512.png", "/icon-192.png", "/parcels.enc"]);
 
 function isShell(request) {
   let url;
