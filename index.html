@@ -97,9 +97,9 @@
 <script>
 (function () {
   "use strict";
-  var SALT = "AAr7Ez0t29zXK9BCbfxSxA==", IV = "2F0VeoLQik5KUuZj", BVER = "a525ebae08f2", ITER = 1000000;
-  var PIV = "OxboS8/0FadUxobE", PVER = "552f80ac9e5a", HAS_PARCELS = true;
-  var DEVICES = [{"cred":"s2N4I9wgBORmW94p2tiPTxw9cok=","blob":"xWGACWOjaw7yz6Vm5xIbQ/ihDbqr5REBax2ZCAqOkKBJzI0mo+UYwT4ReZl6LowO4ZTnAHJGYdppNEl2VJr7xBJPClgihh5TXHGtBK3ZuPc8loLkZBFJMxiV4+UtcZzS2dNw605tGA++ypvZ1HZjCRgpvcxb2KKXHNKl3HFc/eAAYZZjAdifBaAKyuQM8b1opQezweEzG3wkw00UM9Cui6IGtp1bKw==","eph":"BDnLipCS0DNhVfME5biey9y0ZtRQ4ii3H2xMqxMrngE4PtjvzUVuhpJBfvefd4oqmiXBbeweCmk9MQM3oDSjmuw=","wiv":"/9/NA+50+lIpSyZU","wrap":"dOpGqn/p3vKsMkd1fGdZZ1vP8g9nxM2qgcwbo/LrIBjmtLjyvBrjMKXE5CVff2pU"}];
+  var SALT = "zEWFWsz4KLnCxRQoT3L1Jg==", IV = "AkPN3E7MHbQi3at1", BVER = "266af0acd9f8", ITER = 1000000;
+  var PIV = "FLy9SVerm4s7LjuP", PVER = "bb2efd2a9831", HAS_PARCELS = true;
+  var DEVICES = [{"cred":"s2N4I9wgBORmW94p2tiPTxw9cok=","blob":"xWGACWOjaw7yz6Vm5xIbQ/ihDbqr5REBax2ZCAqOkKBJzI0mo+UYwT4ReZl6LowO4ZTnAHJGYdppNEl2VJr7xBJPClgihh5TXHGtBK3ZuPc8loLkZBFJMxiV4+UtcZzS2dNw605tGA++ypvZ1HZjCRgpvcxb2KKXHNKl3HFc/eAAYZZjAdifBaAKyuQM8b1opQezweEzG3wkw00UM9Cui6IGtp1bKw==","eph":"BOEOpyJunOM5rVFgSF3qdkleVWXgsjkAy3DPG3BThTu6vN7tdYs1TSCEfu7VrxhrgnSch6Jh8kvY04RuSxeTjf4=","wiv":"ZmOltMy2tYpiEm7s","wrap":"qxWbA7hWlNXfIna6XFjgmNbgbnZCKvzix++KTQmCAFnjgu6VOTN1bN2/21oTZHxP"}];
   var PRF_SALT = new Uint8Array([73,80,68,45,80,82,70,45,118,49,7,19,84,201,66,13,148,222,41,90,177,5,99,140,250,33,68,201,17,86,120,55]);
   var b64 = function (s) { return Uint8Array.from(atob(s), function (c) { return c.charCodeAt(0); }); };
   var b64e = function (buf) { var u8 = new Uint8Array(buf), s = ""; for (var i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]); return btoa(s); };
@@ -274,6 +274,42 @@
   }
   window.__loadParcels = loadParcels;
 
+  /* ── the private layer's store ───────────────────────────────────────
+     The watchlist, the notes and the alert settings are the owner's own work,
+     and they are the most revealing thing in the whole system: the database
+     says who matters in Idaho, the watchlist says who matters to HIM. So it is
+     never published, never sent anywhere, and never written to disk in the
+     clear. It is sealed with the same key as the database, which means it
+     needs the passkey and the password to read, exactly like everything else.
+     It lives in this browser only, so it does not follow the owner between
+     devices; that is the honest cost of never putting it on a server. */
+  function installVault() {
+    var KEY = "ap_private_v1";
+    window.__vault = {
+      load: function () {
+        var raw;
+        try { raw = localStorage.getItem(KEY); } catch (e) { return Promise.resolve(null); }
+        if (!raw) return Promise.resolve(null);
+        var blob;
+        try { blob = b64(raw); } catch (e) { return Promise.resolve(null); }
+        return subtle.decrypt({ name: "AES-GCM", iv: blob.slice(0, 12) }, dataKey, blob.slice(12))
+          .then(function (buf) { return JSON.parse(new TextDecoder().decode(buf)); })
+          .catch(function () { return null; });   // a store from another build
+      },
+      save: function (obj) {
+        var iv = crypto.getRandomValues(new Uint8Array(12));
+        var body = new TextEncoder().encode(JSON.stringify(obj));
+        return subtle.encrypt({ name: "AES-GCM", iv: iv }, dataKey, body).then(function (ct) {
+          var out = new Uint8Array(12 + ct.byteLength);
+          out.set(iv, 0); out.set(new Uint8Array(ct), 12);
+          try { localStorage.setItem(KEY, b64e(out)); return true; }
+          catch (e) { throw new Error("This device is out of storage for private notes."); }
+        });
+      },
+      wipe: function () { try { localStorage.removeItem(KEY); } catch (e) {} },
+    };
+  }
+
   // Second factor. The password alone unwraps nothing: the wrapping key is
   // HKDF over the ECDH secret for THIS device and the password bits together,
   // and the ECDH secret needs the private key that Face ID or Touch ID just
@@ -296,9 +332,10 @@
     }).then(function (wrapKey) {
       return subtle.decrypt({ name: "AES-GCM", iv: b64(dev.wiv) }, wrapKey, b64(dev.wrap));
     }).then(function (raw) {
-      return subtle.importKey("raw", raw, { name: "AES-GCM" }, false, ["decrypt"]);
+      return subtle.importKey("raw", raw, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
     }).then(function (key) {
       dataKey = key;
+      installVault();
       return boardReady.then(function () {
         if (!boardBytes) throw new Error("The database file did not download" + (boardErr ? " (" + boardErr.message + ")" : "") + ".");
         return subtle.decrypt({ name: "AES-GCM", iv: b64(IV) }, key, boardBytes);

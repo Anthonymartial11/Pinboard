@@ -1,0 +1,72 @@
+# Keeps the newsfeed and the change list fresh. Runs on GitHub's own machines,
+# which are free for a public repository, so the whole pipeline costs nothing.
+#
+# Nothing secret is involved. This job never sees the database, the password or
+# the owner's keys: it reads public news feeds and public county data and
+# writes two public files. Deciding what any of it means for the owner happens
+# inside the unlocked app, on the owner's device.
+name: Ingest news and county changes
+
+on:
+  schedule:
+    - cron: "20 */3 * * *"    # news, every three hours
+    - cron: "40 11 * * *"     # county changes, once a day
+  workflow_dispatch:
+    inputs:
+      what:
+        description: "news, changes, or both"
+        default: both
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ingest
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # The county snapshot has to survive between runs to be diffable, and it
+      # is too big and too churny to commit. The cache keeps it out of history
+      # while still carrying it forward.
+      - name: Restore the previous county snapshot
+        uses: actions/cache/restore@v4
+        with:
+          path: state
+          key: county-state-${{ github.run_id }}
+          restore-keys: county-state-
+
+      - name: Fetch news
+        if: github.event_name == 'schedule' || inputs.what != 'changes'
+        run: node script/news-fetch.mjs
+
+      - name: Fetch county changes
+        if: github.event.schedule == '40 11 * * *' || inputs.what == 'changes' || inputs.what == 'both'
+        run: node script/changes-fetch.mjs
+
+      - name: Save the county snapshot
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: state
+          key: county-state-${{ github.run_id }}
+
+      - name: Publish whatever changed
+        run: |
+          git config user.name "argus-ingest"
+          git config user.email "argus-ingest@users.noreply.github.com"
+          git add news.json changes.json 2>/dev/null || true
+          if git diff --cached --quiet; then
+            echo "nothing new to publish"
+          else
+            git commit -m "Ingest: refresh newsfeed and county change list"
+            git push
+          fi
