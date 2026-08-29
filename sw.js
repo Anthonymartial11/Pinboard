@@ -13,7 +13,7 @@
 // that private. The worker now caches ONLY the app shell listed below.
 // Anything not on this list is passed straight through to the network and is
 // never written to storage.
-const CACHE = "argus-v7";
+const CACHE = "argus-v8";
 const ASSETS = ["./", "./index.html", "./manifest.json", "./icon-512.png", "./icon-192.png"];
 
 // Same-origin app-shell paths only. Compared against the resolved pathname so
@@ -21,6 +21,11 @@ const ASSETS = ["./", "./index.html", "./manifest.json", "./icon-512.png", "./ic
 // parcels.enc is on this list deliberately: it is encrypted at rest, so a
 // cached copy discloses nothing, and caching it keeps the map working offline.
 const SHELL = new Set(["/", "/index.html", "/manifest.json", "/icon-512.png", "/icon-192.png", "/parcels.enc", "/board.enc"]);
+
+// version.json is deliberately NOT on that list. It is how the app finds out a
+// new build exists, so a cached answer would defeat the whole point: the app
+// would be told it is up to date by the very copy that is out of date.
+// Anything off the list is passed straight to the network and never stored.
 
 function isShell(request) {
   let url;
@@ -42,6 +47,24 @@ self.addEventListener("activate", (e) => {
       .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim()),
   );
+});
+
+// PRUNING OLD VERSIONS. board.enc and parcels.enc carry a content version in
+// their query string, so each new build is cached as a separate entry and the
+// old one is never asked for again. Left alone that grows without limit, and
+// on a phone a full storage quota does not just waste space: it is what makes
+// writing the owner's private notes start to fail. The page tells the worker
+// which versions it is actually using and everything else is dropped.
+self.addEventListener("message", (e) => {
+  const keep = e.data && e.data.keep;
+  if (!keep || !Array.isArray(keep)) return;
+  e.waitUntil(caches.open(CACHE).then((c) => c.keys().then((reqs) => Promise.all(
+    reqs.filter((r) => {
+      const u = new URL(r.url);
+      if (!/\/(parcels|board)\.enc$/.test(u.pathname)) return false;
+      return keep.indexOf(u.pathname + u.search) < 0;
+    }).map((r) => c.delete(r)),
+  ))));
 });
 
 self.addEventListener("fetch", (e) => {

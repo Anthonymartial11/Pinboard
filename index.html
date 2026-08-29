@@ -35,6 +35,9 @@
   .lk-btn:active { background:#cfd6dd; }
   .lk-btn:disabled { opacity:.55; }
   .lk-err { min-height:16px; font-size:12.5px; color:#dd7f7f; line-height:1.45; }
+  .lk-update { position:fixed; left:12px; right:12px; bottom:calc(12px + env(safe-area-inset-bottom));
+    z-index:9999; font:inherit; font-size:13.5px; font-weight:700; padding:13px; border-radius:12px;
+    background:#16303f; color:#9fd0ee; border:1px solid #1f4459; cursor:pointer; text-align:center; }
   .lk-why { background:none; border:0; color:#7fa8c9; font-size:12px; text-decoration:underline; cursor:pointer; padding:4px 0; }
   .lk-diag { white-space:pre-wrap; word-break:break-word; font-size:11px; line-height:1.5; color:#8fa2b4; background:#11161c; border:1px solid #222c36; border-radius:8px; padding:10px; margin:0; text-align:left; }
   .lk-ok { font-size:12.5px; color:#77bb8d; }
@@ -71,6 +74,7 @@
     <div class="lk-foot" id="lk-foot">The file is sealed to its owner's devices. Face or fingerprint data never leaves the device.</div>
   </div>
 </div>
+<button id="lk-update" class="lk-update" hidden>A newer version is ready. Tap to load it.</button>
 <script>
 // Deliberately tiny and first. If the main script below fails to parse or
 // throws on the way up, nothing after it runs, including the code that reports
@@ -97,9 +101,9 @@
 <script>
 (function () {
   "use strict";
-  var SALT = "gtMqChbD/MQoocY8vBmFuA==", IV = "IS5QsDdx+a4+BI8C", BVER = "11086d99301c", ITER = 1000000;
-  var PIV = "84/h685junK9WIMk", PVER = "168f24711a00", HAS_PARCELS = true;
-  var DEVICES = [{"cred":"s2N4I9wgBORmW94p2tiPTxw9cok=","blob":"xWGACWOjaw7yz6Vm5xIbQ/ihDbqr5REBax2ZCAqOkKBJzI0mo+UYwT4ReZl6LowO4ZTnAHJGYdppNEl2VJr7xBJPClgihh5TXHGtBK3ZuPc8loLkZBFJMxiV4+UtcZzS2dNw605tGA++ypvZ1HZjCRgpvcxb2KKXHNKl3HFc/eAAYZZjAdifBaAKyuQM8b1opQezweEzG3wkw00UM9Cui6IGtp1bKw==","eph":"BGuuTePaVsKBgVruM7XA1ociijMdibQwlkdW6R5MuCX3jviD8ulDKtAYORsraDijLqb9vTtt/6YqdJ/Gj7AHrh8=","wiv":"1vAGCVZFmIyc0jm9","wrap":"CqRI5tJqKo6ir8bfWo40JWAv86QDLvP4yk1p7wXbOmTRWSz5MeCnA9xHXL95WfKm"}];
+  var SALT = "ZGCDpQh9TV3qTh366oS6Yw==", IV = "KO11vt0bz0cFl1rp", BVER = "baa390e7301c", ITER = 1000000, BUILD = "28b7653d771298dd";
+  var PIV = "UI+93jgLOEz/VDcn", PVER = "868a4e3e035f", HAS_PARCELS = true, MAPK = "kT/Yf1ARbU6MuwJpXPZYMJKSiY7bO8xfKf0elnqiY9cQceckYP8C0KTgPINBLoZHlH5A9YeEhkKkFkxB";
+  var DEVICES = [{"cred":"s2N4I9wgBORmW94p2tiPTxw9cok=","blob":"xWGACWOjaw7yz6Vm5xIbQ/ihDbqr5REBax2ZCAqOkKBJzI0mo+UYwT4ReZl6LowO4ZTnAHJGYdppNEl2VJr7xBJPClgihh5TXHGtBK3ZuPc8loLkZBFJMxiV4+UtcZzS2dNw605tGA++ypvZ1HZjCRgpvcxb2KKXHNKl3HFc/eAAYZZjAdifBaAKyuQM8b1opQezweEzG3wkw00UM9Cui6IGtp1bKw==","eph":"BKjIeV0CuhblHRra9fspwvpuvH41BjZsZtMf2Gpc7HXkQO9eSiltLgbiS6wtz+K/oBwOaj+ydyIkrx63VQX5a0Y=","wiv":"dR1wVx3RJbonyuxB","wrap":"o2tYL+Q5S/uovoHywvQ2DpoqZiH2Vu7UXhkzzEoBlHRBXv/3xCrsIgJeR2Trkh28"}];
   var PRF_SALT = new Uint8Array([73,80,68,45,80,82,70,45,118,49,7,19,84,201,66,13,148,222,41,90,177,5,99,140,250,33,68,201,17,86,120,55]);
   var b64 = function (s) { return Uint8Array.from(atob(s), function (c) { return c.charCodeAt(0); }); };
   var b64e = function (buf) { var u8 = new Uint8Array(buf), s = ""; for (var i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]); return btoa(s); };
@@ -247,6 +251,19 @@
   // Fetches and opens the parcel bundle. Called only when the map is first
   // shown. The file is encrypted at rest, so caching it is safe; what it
   // contains never touches disk in the clear.
+  var mapKey = null;
+  // The map has its own key so the 14MB file only changes when the county
+  // does. It arrives sealed under the data key, so it is unreachable until
+  // both factors have been given.
+  function openMapKey() {
+    if (mapKey) return Promise.resolve(mapKey);
+    if (!MAPK) return Promise.reject(new Error("no map key in this build"));
+    var b = b64(MAPK);
+    return subtle.decrypt({ name: "AES-GCM", iv: b.slice(0, 12) }, dataKey, b.slice(12))
+      .then(function (raw) { return subtle.importKey("raw", raw, { name: "AES-GCM" }, false, ["decrypt"]); })
+      .then(function (k) { mapKey = k; return k; });
+  }
+
   function loadParcels() {
     if (!HAS_PARCELS) return Promise.reject(new Error("no parcel bundle"));
     if (!dataKey) return Promise.reject(new Error("locked"));
@@ -254,9 +271,9 @@
     function grab(opts) {
       return fetch(url, opts)
         .then(function (r) { if (!r.ok) throw new Error("fetch " + r.status); return r.arrayBuffer(); })
-        .then(function (buf) { return subtle.decrypt({ name: "AES-GCM", iv: b64(PIV) }, dataKey, buf); });
+        .then(function (buf) { return subtle.decrypt({ name: "AES-GCM", iv: b64(PIV) }, mapKey, buf); });
     }
-    return grab({})
+    return openMapKey().then(function () { return grab({}); })
       .catch(function () {
         // A stale cached copy is the usual cause; force a clean re-download
         // straight from the network before giving up.
@@ -380,7 +397,57 @@
   $("lk-bio-go").onclick = askBiometric;
   window.__bootOK = true;
 
-  if ("serviceWorker" in navigator) { navigator.serviceWorker.register("./sw.js").catch(function () {}); }
+  /* ── picking up a new version ─────────────────────────────────────────
+     On a phone, closing an installed app and opening it again does not
+     necessarily fetch the page again: iOS often restores the screen it had in
+     memory, so a new build can sit on the server unnoticed. The app therefore
+     asks, itself, whenever it comes back to the front.
+
+     version.json is a few bytes, carries no secret, and is identical for
+     everyone, so asking for it says nothing about this reader.
+
+     What happens next depends on whether anything is open. Locked, which is
+     the state after a real close and reopen, it just reloads: nothing is lost
+     and the new version is simply there. Unlocked, it offers, because
+     reloading mid-sentence would throw away an unlock and interrupt work for
+     the sake of a version number. */
+  window.__BUILDPROBE = BUILD;
+  var checking = false;
+  function checkForUpdate() {
+    if (checking) return;
+    checking = true;
+    fetch("./version.json", { cache: "no-store" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        checking = false;
+        if (!j || !j.build || j.build === BUILD) return;
+        if (!dataKey) { location.reload(); return; }
+        var bar = $("lk-update");
+        if (bar && bar.hidden) {
+          bar.hidden = false;
+          bar.onclick = function () { location.reload(); };
+        }
+      })
+      .catch(function () { checking = false; });
+  }
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "visible") checkForUpdate();
+  });
+  window.addEventListener("pageshow", function (e) { if (e.persisted) checkForUpdate(); });
+  window.addEventListener("focus", checkForUpdate);
+  setTimeout(checkForUpdate, 1500);
+
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("./sw.js").catch(function () {});
+    // Tell the worker which versions of the two big files are actually in use,
+    // so every older copy can be dropped instead of sitting on the phone.
+    navigator.serviceWorker.ready.then(function (reg) {
+      var base = new URL("./", location.href).pathname;
+      var keep = [base + "board.enc?v=" + BVER];
+      if (HAS_PARCELS) keep.push(base + "parcels.enc?v=" + PVER);
+      if (reg.active) reg.active.postMessage({ keep: keep });
+    }).catch(function () {});
+  }
 })();
 </script>
 </body>
