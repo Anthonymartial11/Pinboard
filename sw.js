@@ -13,14 +13,14 @@
 // that private. The worker now caches ONLY the app shell listed below.
 // Anything not on this list is passed straight through to the network and is
 // never written to storage.
-const CACHE = "argus-v6";
+const CACHE = "argus-v7";
 const ASSETS = ["./", "./index.html", "./manifest.json", "./icon-512.png", "./icon-192.png"];
 
 // Same-origin app-shell paths only. Compared against the resolved pathname so
 // a query string cannot smuggle a non-shell URL past the check.
 // parcels.enc is on this list deliberately: it is encrypted at rest, so a
 // cached copy discloses nothing, and caching it keeps the map working offline.
-const SHELL = new Set(["/", "/index.html", "/manifest.json", "/icon-512.png", "/icon-192.png", "/parcels.enc"]);
+const SHELL = new Set(["/", "/index.html", "/manifest.json", "/icon-512.png", "/icon-192.png", "/parcels.enc", "/board.enc"]);
 
 function isShell(request) {
   let url;
@@ -64,6 +64,6 @@ self.addEventListener("fetch", (e) => {
       // Offline fallback. parcels.enc is matched EXACTLY (query included):
       // its URL carries a content version, and serving a different version
       // than the page expects would fail decryption rather than degrade.
-      .catch(() => caches.match(e.request, { ignoreSearch: !/\/parcels\.enc$/.test(new URL(e.request.url).pathname) })),
+      .catch(() => caches.match(e.request, { ignoreSearch: !/\/(parcels|board)\.enc$/.test(new URL(e.request.url).pathname) })),
   );
 });
