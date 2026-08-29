@@ -101,9 +101,9 @@
 <script>
 (function () {
   "use strict";
-  var SALT = "ZGCDpQh9TV3qTh366oS6Yw==", IV = "KO11vt0bz0cFl1rp", BVER = "baa390e7301c", ITER = 1000000, BUILD = "28b7653d771298dd";
-  var PIV = "UI+93jgLOEz/VDcn", PVER = "868a4e3e035f", HAS_PARCELS = true, MAPK = "kT/Yf1ARbU6MuwJpXPZYMJKSiY7bO8xfKf0elnqiY9cQceckYP8C0KTgPINBLoZHlH5A9YeEhkKkFkxB";
-  var DEVICES = [{"cred":"s2N4I9wgBORmW94p2tiPTxw9cok=","blob":"xWGACWOjaw7yz6Vm5xIbQ/ihDbqr5REBax2ZCAqOkKBJzI0mo+UYwT4ReZl6LowO4ZTnAHJGYdppNEl2VJr7xBJPClgihh5TXHGtBK3ZuPc8loLkZBFJMxiV4+UtcZzS2dNw605tGA++ypvZ1HZjCRgpvcxb2KKXHNKl3HFc/eAAYZZjAdifBaAKyuQM8b1opQezweEzG3wkw00UM9Cui6IGtp1bKw==","eph":"BKjIeV0CuhblHRra9fspwvpuvH41BjZsZtMf2Gpc7HXkQO9eSiltLgbiS6wtz+K/oBwOaj+ydyIkrx63VQX5a0Y=","wiv":"dR1wVx3RJbonyuxB","wrap":"o2tYL+Q5S/uovoHywvQ2DpoqZiH2Vu7UXhkzzEoBlHRBXv/3xCrsIgJeR2Trkh28"}];
+  var SALT = "tW/MffT55aiq3h2J3R0aMA==", IV = "uG3EpGqHO4ACF3rZ", BVER = "c1078524ca5d", ITER = 1000000, BUILD = "68f39beb13d1ad83";
+  var PIV = "vj5ilwdAES5/U3cP", PVER = "59eca2b8e10a", HAS_PARCELS = true, MAPK = "5uZN/lWr/KSQ8Flff+QIKm8VdHE5XHejqnRHHYWtS3l+WxQ0WBtnveVHpyo9Z+X+xK7H97+U9Xr8HgKF";
+  var DEVICES = [{"cred":"s2N4I9wgBORmW94p2tiPTxw9cok=","blob":"xWGACWOjaw7yz6Vm5xIbQ/ihDbqr5REBax2ZCAqOkKBJzI0mo+UYwT4ReZl6LowO4ZTnAHJGYdppNEl2VJr7xBJPClgihh5TXHGtBK3ZuPc8loLkZBFJMxiV4+UtcZzS2dNw605tGA++ypvZ1HZjCRgpvcxb2KKXHNKl3HFc/eAAYZZjAdifBaAKyuQM8b1opQezweEzG3wkw00UM9Cui6IGtp1bKw==","eph":"BMPxNSbf7UJnkXHmNyxZfk9h7l2/htMqRAhhpGrMWe3RFE7w7ZuZPuu0bFlv3q88Z6drnlNkAiHaJwthZu0O8zY=","wiv":"3+GF/+02Y/oYn9wY","wrap":"pzzJqE+HEXLnVYZoNLIVq50yJJrBbjkwYpOYGO2MOQjlovdduwbYJw6dk3brLswP"}];
   var PRF_SALT = new Uint8Array([73,80,68,45,80,82,70,45,118,49,7,19,84,201,66,13,148,222,41,90,177,5,99,140,250,33,68,201,17,86,120,55]);
   var b64 = function (s) { return Uint8Array.from(atob(s), function (c) { return c.charCodeAt(0); }); };
   var b64e = function (buf) { var u8 = new Uint8Array(buf), s = ""; for (var i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]); return btoa(s); };
@@ -264,31 +264,76 @@
       .then(function (k) { mapKey = k; return k; });
   }
 
-  function loadParcels() {
-    if (!HAS_PARCELS) return Promise.reject(new Error("no parcel bundle"));
-    if (!dataKey) return Promise.reject(new Error("locked"));
-    var url = "./parcels.enc?v=" + PVER;
-    function grab(opts) {
-      return fetch(url, opts)
-        .then(function (r) { if (!r.ok) throw new Error("fetch " + r.status); return r.arrayBuffer(); })
-        .then(function (buf) { return subtle.decrypt({ name: "AES-GCM", iv: b64(PIV) }, mapKey, buf); });
+  // Opening the county, stage by stage, saying where it is the whole time.
+  //
+  // This used to be one silent promise. When it failed on a phone it produced
+  // a stuck "decrypting" line and nothing else, and three separate guesses at
+  // the cause went nowhere because there was no way to tell a slow download
+  // from a failed decrypt from a browser that cannot inflate gzip. Each step
+  // now names itself, the download reports bytes so a slow line looks slow
+  // rather than broken, and a stall gives up with a reason instead of hanging.
+  function loadParcels(onStage) {
+    var say = typeof onStage === "function" ? onStage : function () {};
+    var stage = "starting";
+    function at(name, text) { stage = name; say(text); }
+    function fail(e) {
+      var err = new Error((e && e.message) || String(e));
+      err.stage = stage;
+      throw err;
     }
-    return openMapKey().then(function () { return grab({}); })
-      .catch(function () {
-        // A stale cached copy is the usual cause; force a clean re-download
-        // straight from the network before giving up.
+
+    var url = "./parcels.enc?v=" + PVER;
+
+    function grab(opts) {
+      at("download", "Downloading the county map...");
+      return fetch(url, opts).then(function (r) {
+        if (!r.ok) throw new Error("the server answered " + r.status);
+        var total = +(r.headers.get("content-length") || 0);
+        // Read it as it arrives so a slow connection shows movement.
+        if (!r.body || !r.body.getReader) return r.arrayBuffer();
+        var reader = r.body.getReader(), chunks = [], got = 0, last = Date.now();
+        return (function pump() {
+          return reader.read().then(function (res) {
+            if (res.done) {
+              var out = new Uint8Array(got), at2 = 0;
+              for (var i = 0; i < chunks.length; i++) { out.set(chunks[i], at2); at2 += chunks[i].length; }
+              return out.buffer;
+            }
+            chunks.push(res.value); got += res.value.length; last = Date.now();
+            say("Downloading the county map... " + (total ? Math.round((got / total) * 100) + "%" : Math.round(got / 1048576) + " MB"));
+            return pump();
+          });
+        })();
+      }).then(function (buf) {
+        at("decrypt", "Decrypting...");
+        return subtle.decrypt({ name: "AES-GCM", iv: b64(PIV) }, mapKey, buf);
+      });
+    }
+
+    at("key", "Opening the map key...");
+    return openMapKey()
+      .catch(fail)
+      .then(function () { return grab({}); })
+      .catch(function (e) {
+        // A stale cached copy is the usual cause of a first failure; force a
+        // clean re-download before giving up.
+        if (e && e.stage === "key") throw e;
         return grab({ cache: "reload" });
       })
       .then(function (gz) {
-        if (typeof DecompressionStream === "undefined") throw new Error("no gzip support");
+        at("inflate", "Unpacking...");
+        if (typeof DecompressionStream === "undefined") throw new Error("this browser cannot inflate gzip");
         var ds = new DecompressionStream("gzip");
         return new Response(new Blob([gz]).stream().pipeThrough(ds)).arrayBuffer();
       })
       .then(function (buf) {
-        MAP.decodeContainer(buf);      // typed-array views; nothing is parsed
+        at("decode", "Building the county index...");
+        MAP.decodeContainer(buf);
         return true;
-      });
+      })
+      .catch(fail);
   }
+
   window.__loadParcels = loadParcels;
 
   /* ── the private layer's store ───────────────────────────────────────
