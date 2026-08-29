@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <meta name="robots" content="noindex, nofollow" />
 <meta name="theme-color" content="#0c0e11" />
-<title>Security Upgrade</title>
+<title>Add a Device</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html,body { min-height:100%; }
@@ -29,10 +29,11 @@
 </head>
 <body>
 <div class="card">
-  <div class="stamp">Owner setup</div>
-  <h1>Bind the File to You</h1>
-  <p>This creates a new key on this device, locked behind your Face ID or fingerprint. Nothing secret leaves your phone. The text it produces at the end is safe to send: it is a public key plus a sealed box that only your biometrics can open.</p>
-  <p>Tap the button, approve with Face ID, then copy the whole block and send it back in the chat.</p>
+  <div class="stamp">Add a device</div>
+  <h1>Give This Device Its Own Key</h1>
+  <p>Run this on any device you want to open the database with. It makes a brand new key here, locked behind this device's Face ID or fingerprint. Nothing secret ever leaves the device, and no key is copied from another one.</p>
+  <p>The block it produces at the end is safe to send in the chat: a public key plus a sealed box that only this device's biometrics can open.</p>
+  <p>Tap Start, approve with Face ID, then Copy and paste it back to Claude.</p>
   <button class="btn" id="go" type="button">Start</button>
   <div class="err" id="err"></div>
   <div id="out">
@@ -51,6 +52,23 @@
   var PRF_SALT = new Uint8Array([73,80,68,45,80,82,70,45,118,49,7,19,84,201,66,13,148,222,41,90,177,5,99,140,250,33,68,201,17,86,120,55]);
   var u8b64 = function (buf) { var u8 = new Uint8Array(buf), s = ""; for (var i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]); return btoa(s); };
   function fail(msg) { err.textContent = msg; go.disabled = false; go.textContent = "Start"; }
+  // A short capability read-out, so a failure says what this device can do
+  // rather than only that something went wrong. No identifiers, nothing secret.
+  function diag() {
+    return "passkeys " + (window.PublicKeyCredential ? "yes" : "no")
+      + "; app mode " + ((window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true) ? "yes" : "no")
+      + "; " + navigator.userAgent;
+  }
+  // A plain name for this device, so the binding is readable later.
+  function deviceLabel() {
+    var u = navigator.userAgent;
+    if (/iPhone/.test(u)) return "iPhone";
+    if (/iPad/.test(u)) return "iPad";
+    if (/Macintosh/.test(u)) return "Mac";
+    if (/Android/.test(u)) return "Android";
+    if (/Windows/.test(u)) return "Windows PC";
+    return "device";
+  }
 
   go.addEventListener("click", function () {
     err.textContent = ""; go.disabled = true; go.textContent = "Working...";
@@ -113,7 +131,7 @@
                 ]).then(function (bits) {
                   var a = new Uint8Array(bits[0]), b = new Uint8Array(bits[1]);
                   for (var i = 0; i < a.length; i++) if (a[i] !== b[i]) throw new Error("SELFTEST");
-                  var out = { v: 1, cred: u8b64(credRawId), pub: u8b64(pubRaw), blob: u8b64(blob.buffer) };
+                  var out = { v: 1, label: deviceLabel(), cred: u8b64(credRawId), pub: u8b64(pubRaw), blob: u8b64(blob.buffer) };
                   document.getElementById("ta").value = JSON.stringify(out);
                   document.getElementById("out").style.display = "block";
                   go.style.display = "none";
@@ -124,9 +142,18 @@
         });
       });
     }).catch(function (e) {
-      if (e && e.message === "NOPRF") fail("This device or browser does not support the key feature (PRF). Tell Claude, there is a fallback.");
-      else if (e && e.message === "SELFTEST") fail("Self-test failed. Do not send anything; tell Claude.");
-      else fail("Face ID did not complete. Try again.");
+      var name = (e && e.name) || "", msg = String((e && e.message) || e || "");
+      if (msg === "NOPRF") {
+        fail("This device cannot do the unlock maths this app needs. On an iPhone or iPad that needs iOS 18 or later; check Settings, General, Software Update. Tell Claude what this says. (" + diag() + ")");
+      } else if (msg === "SELFTEST") {
+        fail("Self-test failed. Do not send anything. Tell Claude.");
+      } else if (name === "NotAllowedError") {
+        fail("The prompt was dismissed or timed out. Tap Start and approve with Face ID. (" + diag() + ")");
+      } else if (name === "SecurityError") {
+        fail("Wrong web address for this key. Open this page from the same address as the app. (" + diag() + ")");
+      } else {
+        fail("Could not create the key: " + (name || msg || "unknown") + ". (" + diag() + ")");
+      }
     });
   });
   document.getElementById("copy").addEventListener("click", function () {

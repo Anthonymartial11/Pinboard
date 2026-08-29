@@ -69,7 +69,8 @@
   var PRF_SALT = new Uint8Array([73,80,68,45,80,82,70,45,118,49,7,19,84,201,66,13,148,222,41,90,177,5,99,140,250,33,68,201,17,86,120,55]);
   var b64 = function (s) { return Uint8Array.from(atob(s), function (c) { return c.charCodeAt(0); }); };
   var $ = function (id) { return document.getElementById(id); };
-  var BK = null, privKey = null, decoded = null;
+  var b64e = function (buf) { var u8 = new Uint8Array(buf), t = ""; for (var i = 0; i < u8.length; i++) t += String.fromCharCode(u8[i]); return btoa(t); };
+  var BK = null, privKey = null, decoded = null, activeDev = null;
 
   fetch("./backup.enc", { cache: "no-store" }).then(function (r) {
     if (!r.ok) throw new Error("http");
@@ -86,19 +87,24 @@
     navigator.credentials.get({
       publicKey: {
         challenge: crypto.getRandomValues(new Uint8Array(32)),
-        allowCredentials: [{ type: "public-key", id: b64(BK.cred) }],
+        allowCredentials: BK.devices.map(function (d) { return { type: "public-key", id: b64(d.cred) }; }),
         userVerification: "required",
         extensions: { prf: { eval: { first: PRF_SALT } } },
         timeout: 60000
       }
     }).then(function (assertion) {
+      // Which enrolled device answered; each has its own sealed key.
+      var got = b64e(assertion.rawId);
+      activeDev = null;
+      for (var d = 0; d < BK.devices.length; d++) if (BK.devices[d].cred === got) { activeDev = BK.devices[d]; break; }
+      if (!activeDev) throw new Error("unenrolled");
       var ext = assertion.getClientExtensionResults();
       if (!ext.prf || !ext.prf.results || !ext.prf.results.first) throw new Error("noprf");
       var S = new Uint8Array(ext.prf.results.first);
       return subtle.importKey("raw", S, "HKDF", false, ["deriveKey"]).then(function (hk) {
         return subtle.deriveKey({ name: "HKDF", hash: "SHA-256", salt: new Uint8Array(16), info: new TextEncoder().encode("IPD-wrap-v1") }, hk, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
       }).then(function (wrapKey) {
-        var blob = b64(BK.blob);
+        var blob = b64(activeDev.blob);
         return subtle.decrypt({ name: "AES-GCM", iv: blob.slice(0, 12) }, wrapKey, blob.slice(12));
       }).then(function (pkcs8) {
         return subtle.importKey("pkcs8", pkcs8, { name: "ECDH", namedCurve: "P-256" }, false, ["deriveBits"]);
@@ -116,7 +122,7 @@
     var err = $("pw-err"), go = $("pw-go");
     err.textContent = ""; go.disabled = true; go.textContent = "Decrypting...";
     Promise.all([
-      subtle.importKey("raw", b64(BK.eph), { name: "ECDH", namedCurve: "P-256" }, false, []).then(function (ephPub) {
+      subtle.importKey("raw", b64(activeDev.eph), { name: "ECDH", namedCurve: "P-256" }, false, []).then(function (ephPub) {
         return subtle.deriveBits({ name: "ECDH", public: ephPub }, privKey, 256);
       }),
       subtle.importKey("raw", new TextEncoder().encode($("pw").value), "PBKDF2", false, ["deriveBits"]).then(function (km) {
@@ -127,6 +133,10 @@
       return subtle.importKey("raw", ikm, "HKDF", false, ["deriveKey"]);
     }).then(function (hk) {
       return subtle.deriveKey({ name: "HKDF", hash: "SHA-256", salt: new Uint8Array(16), info: new TextEncoder().encode("IPD-final-v2") }, hk, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
+    }).then(function (wrapKey) {
+      return subtle.decrypt({ name: "AES-GCM", iv: b64(activeDev.wiv) }, wrapKey, b64(activeDev.wrap));
+    }).then(function (raw) {
+      return subtle.importKey("raw", raw, { name: "AES-GCM" }, false, ["decrypt"]);
     }).then(function (key) {
       return subtle.decrypt({ name: "AES-GCM", iv: b64(BK.iv) }, key, b64(BK.ct));
     }).then(function (buf) {
