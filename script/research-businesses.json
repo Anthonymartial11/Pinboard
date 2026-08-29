@@ -1,0 +1,63 @@
+{
+  "_note": "Researched by hand and cited, kept separate from what the records already said. Each entry names the outlet it came from so any claim can be checked. Where a source only supports control or a family holding, that is what is recorded: it is not upgraded to personal ownership.",
+  "little": [
+    {
+      "name": "Little Land and Livestock",
+      "rels": ["family-owned"],
+      "cite": "Wikipedia; KIVI-TV",
+      "quote": "The family sheep and cattle operation founded on the ranch his grandfather Andy Little took over in the 1890s. Brad Little managed it for close to 30 years until his son David became manager in 2009, when Little was appointed lieutenant governor.",
+      "flag": "A family operation he ran, not a personally-owned company. No filing was found setting out his individual stake."
+    },
+    {
+      "name": "Little Enterprises, Inc.",
+      "rels": ["leads"],
+      "cite": "Wikipedia",
+      "quote": "Described as head of Little Enterprises, Inc., a diversified farming and cattle operation.",
+      "flag": "Heading a company is not owning it. Recorded as leadership until a filing shows a stake."
+    }
+  ],
+  "jb-scott": [
+    {
+      "name": "Alscott Inc.",
+      "rels": ["controls"],
+      "cite": "BoiseDev; AP via Spokesman-Review",
+      "quote": "The Albertson family office, founded as Alsco Inc. in 1959 by Joe and Kathryn Albertson with daughter Barbara and her husband JL Scott. Today controlled by Joseph B. Scott and grandchildren Jamie Jo Scott and Brian J. Scott. Holdings across roughly eight entities in real estate, agriculture, hospitality and manufacturing: Shore Lodge and Whitetail Golf Club in McCall, Rocking A Ranch in Eagle, Alscott Farm in south-west England, and a stake in K12 Inc. that returned more than $15M. Bought the former Camp Morrison Boy Scout camp near McCall in 2024.",
+      "flag": "Rocking A Ranch in Eagle puts Alscott directly on Ada County ground."
+    }
+  ],
+  "jamie-jo-scott": [
+    {
+      "name": "Alscott Inc.",
+      "rels": ["co-controls"],
+      "cite": "BoiseDev",
+      "quote": "Named alongside Joseph B. Scott and Brian J. Scott as controlling the Albertson family office."
+    }
+  ],
+  "turnbull": [
+    {
+      "name": "Brighton Corporation",
+      "rels": ["co-founded", "owns"],
+      "cite": "Idaho Business Review Powerlist 2024; Brighton Co; Idaho Press",
+      "quote": "Brighton Corporation was launched in 1992 under Tom Tomlinson and David Turnbull, and Turnbull is named as its founder, owner and chairman. One of Meridian's largest developers.",
+      "flag": "The company's own history dates the original business to 1968 under Tom Tomlinson and Ted Johnson, so Turnbull co-founded Brighton Corporation in 1992, not the 1968 predecessor."
+    }
+  ],
+  "clyde-avimor": [
+    {
+      "name": "Avimor Partners LLC",
+      "rels": ["family-owned"],
+      "cite": "KTVB; Idaho Business Review; SOS Eagle",
+      "quote": "Colin McLeod bought what became Spring Valley Ranch in 1916 and grew it to about 37,000 acres. The family sold 23,000 acres to Arizona developer SunCor in 2002 and partnered with it on the master plan in 2003; SunCor sold back to the McLeods in 2011. Avimor Partners now includes the McLeod family, Richter and other local parties, with the McLeod family holding the majority.",
+      "flag": "23,000 acres off Highway 55 north of Eagle, in Ada County. The largest single privately held block of land in this database."
+    }
+  ],
+  "moyle": [
+    {
+      "name": "Moyle family farm (Star, Ada County)",
+      "rels": ["family-owned"],
+      "cite": "Wikipedia; Lewiston Tribune opinion column",
+      "quote": "He left college to take over the family farm after his father was injured. The Ada County assessor contends three of his parcels have not produced an agricultural product for some time, and that one should be valued at about $2.7M because it has been developed with a man-made lake, sidewalks, curbs and gutters, while still being taxed at the lighter agricultural rate.",
+      "flag": "IMPORTANT: the assessor dispute reaches this database through an opinion column, not a news report or a filing. The underlying assessment record would settle it and has not been obtained. Treat the $2.7M figure and the three-parcel count as unconfirmed."
+    }
+  ]
+}
