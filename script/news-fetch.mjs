@@ -20,6 +20,23 @@ const FEEDS = [
   { id: "idahoednews", name: "Idaho Ed News", url: "https://www.idahoednews.org/feed/" },
   { id: "ktvb", name: "KTVB", url: "https://www.ktvb.com/feeds/syndication/rss/news/local" },
   { id: "ibr", name: "Idaho Business Review", url: "https://idahobusinessreview.com/feed/" },
+
+  // BOISEDEV, READ THROUGH THE NEWS INDEXES. Its own feed sits behind a
+  // Cloudflare bot challenge that answers 403 to every path, its RSS and its
+  // WordPress API included. That is the publisher deliberately saying no to
+  // automated readers, and working around it is not something this job will
+  // do. The indexes below are public feeds those companies publish about
+  // BoiseDev, so BoiseDev's own server is never touched.
+  //
+  // Two of them, because they fail in opposite directions. Google carries far
+  // more headlines but no article text and only a redirect link. Bing carries
+  // fewer stories but real opening paragraphs and, inside its redirect, the
+  // direct boisedev.com address. Merged, the coverage is Google's and the
+  // detail is Bing's.
+  { id: "boisedev", name: "BoiseDev", local: true, via: "Google News", strip: / - Boise ?Dev$/i,
+    url: "https://news.google.com/rss/search?q=site:boisedev.com&hl=en-US&gl=US&ceid=US:en" },
+  { id: "boisedev", name: "BoiseDev", local: true, via: "Bing News", unwrap: true,
+    url: "https://www.bing.com/news/search?q=site%3Aboisedev.com&format=RSS&count=40" },
 ];
 
 /* ── minimal feed parsing ──────────────────────────────────────────────
@@ -51,17 +68,40 @@ function parseFeed(xml, feed) {
       const lm = b.match(/<link[^>]*href="([^"]+)"/i);
       link = lm ? decode(lm[1]) : "";
     }
+    // An index appends its own furniture: Google puts " - Boise Dev" on every
+    // headline, Bing wraps the real address in a click tracker. Both are
+    // undone here so the story reads as the publisher wrote it and the link
+    // goes straight to them.
+    let title = strip(tag(b, "title"));
+    if (feed.strip) title = title.replace(feed.strip, "").trim();
+    if (feed.unwrap) {
+      const u = link.replace(/&amp;/g, "&").match(/[?&]url=([^&]+)/);
+      if (u) { try { link = decodeURIComponent(u[1]); } catch (e) {} }
+    }
     const body = strip(tag(b, "content:encoded") || tag(b, "content") || tag(b, "description") || tag(b, "summary"));
+    // Google's "description" is a link whose visible text is the headline
+    // again. Stripping the tags leaves the title, which then looks like a
+    // summary and is not one. The raw block is checked, not the stripped text,
+    // because the giveaway is the href and stripping removes it.
+    let text = body;
+    const rawDesc = tag(b, "description");
+    const echoed = text && title && text.replace(/\s+/g, " ").toLowerCase().indexOf(title.replace(/\s+/g, " ").toLowerCase()) === 0
+                   && text.length < title.length + 40;
+    if (/^\s*$/.test(text) || rawDesc.indexOf("news.google.com") >= 0 || echoed) text = "";
     const when = strip(tag(b, "pubDate") || tag(b, "published") || tag(b, "updated") || tag(b, "dc:date"));
     const ts = when ? Date.parse(when) : NaN;
     return {
-      title: strip(tag(b, "title")),
-      url: link,
-      source: feed.name, sourceId: feed.id,
+      title, url: link,
+      source: feed.name, sourceId: feed.id, via: feed.via || null, local: !!feed.local,
       ts: Number.isFinite(ts) ? ts : Date.now(),
-      body: body.slice(0, 4000),
+      body: text.slice(0, 4000),
     };
-  }).filter((a) => a.title && a.url);
+  }).filter((a) => a.title && a.url
+      && !/bing\.com\/news\/search/.test(a.url)
+      // Tag, author and category listings, not articles. A search index treats
+      // them as pages like any other; a reader would find them baffling.
+      && !/\bArchives?\s*$/i.test(a.title)
+      && !/\/(tag|tags|category|author|topic|page)\//i.test(a.url));
 }
 
 /* ── relevance ─────────────────────────────────────────────────────────
@@ -195,7 +235,16 @@ function locate(text) {
   return null;
 }
 
-function relevant(text) {
+function relevant(text, art) {
+  // A publication whose entire beat is this valley is in scope by definition.
+  // Requiring it to name a city as well would drop stories that simply say
+  // "the Bench" or nothing at all, which is most of what a local outlet runs.
+  if (art && art.local) {
+    const hay0 = flatten(text);
+    const far = ELSEWHERE.filter((c) => hay0.includes(" " + c + " ")).length;
+    const near = CITIES.filter((c) => hay0.includes(" " + c + " ")).length;
+    return near >= far;
+  }
   const hay = flatten(text);
   const here = CITIES.some((c) => hay.includes(" " + c + " ")) || AREAS.some((a) => hay.includes(" " + a + " "));
   if (!here) return false;
@@ -206,41 +255,100 @@ function relevant(text) {
 }
 
 /* ── run ───────────────────────────────────────────────────────────── */
-async function grab(f) {
-  try {
-    const r = await fetch(f.url, { headers: { "user-agent": "Mozilla/5.0 (compatible; ArgusReader/1.0)" }, signal: AbortSignal.timeout(30000) });
-    if (!r.ok) { console.log("  " + f.name + ": HTTP " + r.status); return []; }
-    const items = parseFeed(await r.text(), f);
-    console.log("  " + f.name + ": " + items.length + " items");
-    return items;
-  } catch (e) { console.log("  " + f.name + ": " + e.message); return []; }
+// Outlets rate-limit, and one 429 should not cost a whole outlet for the run.
+// Backing off and asking again politely is the difference between four sources
+// and five.
+async function grab(f, tries = 3) {
+  for (let i = 0; i < tries; i++) {
+    try {
+      const r = await fetch(f.url, {
+        headers: { "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+                   "accept": "application/rss+xml, application/xml, text/xml, */*;q=0.8" },
+        signal: AbortSignal.timeout(30000),
+      });
+      if ((r.status === 429 || r.status >= 500) && i < tries - 1) {
+        await new Promise((z) => setTimeout(z, 4000 * Math.pow(2, i)));
+        continue;
+      }
+      if (!r.ok) { console.log("  " + f.name + (f.via ? " (" + f.via + ")" : "") + ": HTTP " + r.status); return []; }
+      const items = parseFeed(await r.text(), f);
+      console.log("  " + f.name + (f.via ? " (" + f.via + ")" : "") + ": " + items.length + " items");
+      return items;
+    } catch (e) {
+      if (i === tries - 1) { console.log("  " + f.name + ": " + e.message); return []; }
+      await new Promise((z) => setTimeout(z, 4000 * Math.pow(2, i)));
+    }
+  }
+  return [];
 }
 
-const all = (await Promise.all(FEEDS.map(grab))).flat();
+// NOT FEEDS.map(grab). Array.map hands the callback the index as its second
+// argument, which lands in `tries`, so the first feed in the list got zero
+// attempts and returned nothing without ever logging why. Idaho Capital Sun
+// silently disappeared from the newsfeed for several runs because of it.
+const all = (await Promise.all(FEEDS.map((f) => grab(f)))).flat();
+const quiet = FEEDS.filter((f) => !all.some((a) => a.source === f.name && (!f.via || a.via === f.via)));
+if (quiet.length) console.log("  returned nothing:", quiet.map((f) => f.name + (f.via ? " (" + f.via + ")" : "")).join(", "));
 const cutoff = Date.now() - KEEP_DAYS * 86400000;
 const seen = new Set();
 const kept = [];
-for (const a of all.sort((x, y) => y.ts - x.ts)) {
+// The same BoiseDev story arrives from both indexes. Deduplicating on the URL
+// alone would keep both, because the two indexes give different addresses for
+// it, so the headline decides. Bing's copy is preferred where it exists: it
+// carries the article's opening and a direct link to the publisher.
+const titleKey = (t) => t.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().slice(0, 90);
+const byTitle = new Map();
+for (const a of all) {
+  const k = titleKey(a.title);
+  const cur = byTitle.get(k);
+  if (!cur) { byTitle.set(k, a); continue; }
+  const better = (a.body ? 2 : 0) + (a.url.indexOf("news.google.com") < 0 ? 1 : 0);
+  const has = (cur.body ? 2 : 0) + (cur.url.indexOf("news.google.com") < 0 ? 1 : 0);
+  if (better > has) byTitle.set(k, a);
+}
+for (const a of [...byTitle.values()].sort((x, y) => y.ts - x.ts)) {
   if (a.ts < cutoff) continue;
   const key = a.url.split("?")[0];
   if (seen.has(key)) continue;
   seen.add(key);
   const text = a.title + ". " + a.body;
-  if (!relevant(text)) continue;
+  if (!relevant(text, a)) continue;
   const loc = locate(text);
   kept.push({
     id: Buffer.from(key).toString("base64url").slice(-22),
     title: a.title, url: a.url, source: a.source, sourceId: a.sourceId, ts: a.ts,
+    via: a.via || undefined,
+    // A story with no body is a headline the index gave us and nothing more.
+    // The app says so rather than showing an empty article as if it had failed.
+    titleOnly: a.body ? undefined : true,
     summary: a.body.slice(0, 400), body: a.body,
     loc,
   });
   if (kept.length >= MAX_ITEMS) break;
 }
 
+// A run that fetched almost nothing is a broken run, not a quiet news day:
+// every outlet rate-limiting at once, or a parser mistake. Publishing it would
+// blank the reader's feed. One such mistake here produced zero stories and
+// would have shipped, so the previous file stands unless the new one is
+// plausible.
+const prevOut = fs.existsSync(OUT) ? JSON.parse(fs.readFileSync(OUT, "utf8")) : null;
+const had = prevOut && prevOut.items ? prevOut.items.length : 0;
+if (!kept.length && had) {
+  console.log("REFUSING TO PUBLISH: 0 stories this run, keeping the " + had + " already live");
+  process.exit(1);
+}
+if (had >= 20 && kept.length < had * 0.35) {
+  console.log("REFUSING TO PUBLISH: " + kept.length + " stories against " + had + " live; that is a collapse, not a slow day");
+  process.exit(1);
+}
 const out = { v: 1, built: Date.now(), count: kept.length, items: kept };
 fs.writeFileSync(OUT, JSON.stringify(out));
 const byLevel = {};
 for (const k of kept) { const l = k.loc ? k.loc.level : "none"; byLevel[l] = (byLevel[l] || 0) + 1; }
+const bySrc = {};
+for (const k of kept) bySrc[k.source] = (bySrc[k.source] || 0) + 1;
+console.log("by source:", JSON.stringify(bySrc));
 console.log("fetched:", all.length, "| kept for Ada County:", kept.length,
             "| news.json:", (fs.statSync(OUT).size / 1024).toFixed(0), "KB");
 console.log("located:", JSON.stringify(byLevel));
