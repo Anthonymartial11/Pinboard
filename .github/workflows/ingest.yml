@@ -1,20 +1,25 @@
-# Keeps the newsfeed and the change list fresh. Runs on GitHub's own machines,
-# which are free for a public repository, so the whole pipeline costs nothing.
+# Keeps the newsfeed fresh, and keeps the archive growing.
+#
+# The archive is the part that matters. Every source it reads is a window, not
+# a record: Boise's tracker shows a project's status today and overwrites it
+# tomorrow. This job is what turns those windows into a history, one day at a
+# time, and a day that is missed is a day that cannot be recovered later at any
+# price. That is the whole reason it runs on a schedule instead of by hand.
 #
 # Nothing secret is involved. This job never sees the database, the password or
-# the owner's keys: it reads public news feeds and public county data and
-# writes two public files. Deciding what any of it means for the owner happens
-# inside the unlocked app, on the owner's device.
+# the owner's keys: it reads public news feeds and public county data. Deciding
+# what any of it means for the owner happens inside the unlocked app, on the
+# owner's device.
 name: Ingest news and county changes
 
 on:
   schedule:
     - cron: "20 */3 * * *"    # news, every three hours
-    - cron: "40 11 * * *"     # county changes, once a day
+    - cron: "40 11 * * *"     # the archive, once a day, 4:40am Phoenix
   workflow_dispatch:
     inputs:
       what:
-        description: "news, changes, or both"
+        description: "news, archive, or both"
         default: both
 
 permissions:
@@ -28,45 +33,47 @@ jobs:
   ingest:
     runs-on: ubuntu-latest
     steps:
+      # The archive replays its own history to work out what changed, so the
+      # full file has to be here. A shallow checkout would make every run look
+      # like the first one and append a duplicate of the entire county.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
 
-      # The county snapshot has to survive between runs to be diffable, and it
-      # is too big and too churny to commit. The cache keeps it out of history
-      # while still carrying it forward.
-      - name: Restore the previous county snapshot
-        uses: actions/cache/restore@v4
-        with:
-          path: state
-          key: county-state-${{ github.run_id }}
-          restore-keys: county-state-
-
       - name: Fetch news
-        if: github.event_name == 'schedule' || inputs.what != 'changes'
+        if: github.event.schedule == '20 */3 * * *' || inputs.what == 'news' || inputs.what == 'both'
         run: node script/news-fetch.mjs
 
-      - name: Fetch county changes
-        if: github.event.schedule == '40 11 * * *' || inputs.what == 'changes' || inputs.what == 'both'
-        run: node script/changes-fetch.mjs
+      # Reads every source, compares it against the archive, appends what moved.
+      # No cache is involved anywhere: the archive is its own memory, so a lost
+      # cache costs nothing and there is no state to go stale or disagree.
+      - name: Grow the archive
+        if: github.event.schedule == '40 11 * * *' || inputs.what == 'archive' || inputs.what == 'both'
+        run: node script/archive.mjs
 
-      - name: Save the county snapshot
-        uses: actions/cache/save@v4
-        if: always()
-        with:
-          path: state
-          key: county-state-${{ github.run_id }}
+      # Turns the last few months of the archive into the list the app reads.
+      - name: Republish the change list
+        if: github.event.schedule == '40 11 * * *' || inputs.what == 'archive' || inputs.what == 'both'
+        run: node script/changes-publish.mjs
 
       - name: Publish whatever changed
         run: |
           git config user.name "argus-ingest"
           git config user.email "argus-ingest@users.noreply.github.com"
-          git add news.json changes.json 2>/dev/null || true
+          git add news.json changes.json archive 2>/dev/null || true
           if git diff --cached --quiet; then
             echo "nothing new to publish"
           else
-            git commit -m "Ingest: refresh newsfeed and county change list"
-            git push
+            git commit -m "Ingest: refresh newsfeed, grow the archive"
+            # Another run may have landed first. Rebase onto it rather than
+            # forcing, because losing an archive commit loses a day for good.
+            for i in 1 2 3 4; do
+              git pull --rebase origin main && git push origin HEAD:main && exit 0
+              sleep $((2 ** i))
+            done
+            echo "could not push after four tries"; exit 1
           fi
