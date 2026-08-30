@@ -5,9 +5,17 @@
 // filtered list would broadcast the watchlist, which would be worse than
 // publishing the database.
 //
-// Two triggers are live, because two have public data behind them:
+// Four triggers are live now:
 //   assessment jump  - Ada County parcel TOTALVALUE, diffed against last run
 //   new permit       - City of Boise residential permits and demolitions
+//   new application  - City of Boise development tracker: a planning project
+//                      the moment it is filed, with its next hearing date
+//   rezone activity  - City of Boise zoning activities: rezone and entitlement
+//                      cases, their status, and the units being proposed
+//
+// The last two are the earliest signals that exist. A rezone application is
+// public the day it is filed and moves value long before a price does, so a
+// snapshot of what is planned was never enough: what matters is what changed.
 //
 // Three of the five asked for are NOT built, because no free public source
 // carries them and inventing them would be worse than leaving them out:
@@ -134,11 +142,99 @@ if (permitNow.length) {
   console.log("  new since last run:", permitChanges.length);
 }
 
+/* ── planning applications, the earliest public signal ─────────────────── */
+const BOISE = "https://services1.arcgis.com/WHM6qC35aMtyAAlN/arcgis/rest/services/";
+
+async function pullAll(path, fields) {
+  const out = [];
+  let offset = 0;
+  for (;;) {
+    const j = await getJSON(BOISE + path + "/query?where=1%3D1&outFields=" + encodeURIComponent(fields)
+      + "&outSR=4326&returnGeometry=true&geometryPrecision=6&f=json&resultOffset=" + offset + "&resultRecordCount=1000");
+    if (!j || !j.features || !j.features.length) break;
+    out.push(...j.features);
+    offset += j.features.length;
+    if (!j.exceededTransferLimit && j.features.length < 1000) break;
+    if (offset > 40000) break;
+  }
+  return out;
+}
+// A polygon's rough centre is enough to put a pin on the map.
+function centre(g) {
+  if (!g) return [null, null];
+  const r = (g.rings && g.rings[0]) || (g.paths && g.paths[0]);
+  if (!r || !r.length) return [g.x != null ? +g.x.toFixed(6) : null, g.y != null ? +g.y.toFixed(6) : null];
+  let x = 0, y = 0;
+  for (const p of r) { x += p[0]; y += p[1]; }
+  return [+(x / r.length).toFixed(6), +(y / r.length).toFixed(6)];
+}
+
+console.log("reading Boise planning applications...");
+const trackFile = STATE + "tracker.json";
+let appChanges = [];
+const track = await pullAll("Development_Tracker_Open_Data/FeatureServer/0",
+  "RecordID,RecordName,Status,RecordType,PropertyAddress,ReviewAuthority,NextHearingDate,HearingBody,Website,AddToTrackerDate,Description");
+console.log("  development tracker:", track.length, "live projects");
+if (track.length) {
+  const prev = fs.existsSync(trackFile) ? JSON.parse(fs.readFileSync(trackFile, "utf8")) : null;
+  const now = {};
+  for (const f of track) {
+    const a = f.attributes, id = String(a.RecordID || "");
+    if (!id) continue;
+    now[id] = a.Status || "";
+    const was = prev ? prev[id] : undefined;
+    if (prev && was !== undefined && was === now[id]) continue;      // nothing moved
+    const [lon, lat] = centre(f.geometry);
+    appChanges.push({
+      t: prev === null ? "application" : (was === undefined ? "application" : "application-status"),
+      id, addr: String(a.PropertyAddress || a.RecordName || "").trim(),
+      status: a.Status || "", was: was === undefined ? null : was,
+      desc: [a.RecordType, a.Description].filter(Boolean).join(" · ").slice(0, 160),
+      hearing: a.NextHearingDate || null, body: a.HearingBody || null,
+      url: a.Website || null, lon, lat,
+    });
+  }
+  fs.writeFileSync(trackFile, JSON.stringify(now));
+  if (!prev) { console.log("  first run: baseline recorded, nothing to report yet"); appChanges = []; }
+  else console.log("  new or moved since last run:", appChanges.length);
+}
+
+console.log("reading Boise rezone and entitlement cases...");
+const zaFile = STATE + "zoneacts.json";
+let zoneChanges = [];
+const za = await pullAll("PDS_Zoning_Activities/FeatureServer/0",
+  "RecordID,RecordName,Status,StatusCategory,ProjectType,ProposedUse,ProposedUseCategory,ProposedUnitsTotal,FullAddress,ZoningDistrict,ReviewAuthority,Description,CRCompleteDate");
+console.log("  zoning activities:", za.length, "cases");
+if (za.length) {
+  const prev = fs.existsSync(zaFile) ? JSON.parse(fs.readFileSync(zaFile, "utf8")) : null;
+  const now = {};
+  for (const f of za) {
+    const a = f.attributes, id = String(a.RecordID || "");
+    if (!id) continue;
+    now[id] = a.Status || "";
+    const was = prev ? prev[id] : undefined;
+    if (prev && was !== undefined && was === now[id]) continue;
+    const [lon, lat] = centre(f.geometry);
+    zoneChanges.push({
+      t: was === undefined ? "rezone" : "rezone-status",
+      id, addr: String(a.FullAddress || a.RecordName || "").trim(),
+      status: a.Status || "", was: was === undefined ? null : was,
+      desc: [a.ProjectType, a.ProposedUse, a.Description].filter(Boolean).join(" · ").slice(0, 160),
+      units: a.ProposedUnitsTotal && +a.ProposedUnitsTotal > 0 ? +a.ProposedUnitsTotal : null,
+      zone: a.ZoningDistrict || null, lon, lat,
+    });
+  }
+  fs.writeFileSync(zaFile, JSON.stringify(now));
+  if (!prev) { console.log("  first run: baseline recorded, nothing to report yet"); zoneChanges = []; }
+  else console.log("  new or moved since last run:", zoneChanges.length);
+}
+
 /* ── publish ─────────────────────────────────────────────────────────── */
 // Kept to a bounded size so the app never has to swallow an unbounded file.
 const MAXV = 4000, MAXP = 1500;
 const prevPub = fs.existsSync(PUB + "changes.json") ? JSON.parse(fs.readFileSync(PUB + "changes.json", "utf8")) : { items: [] };
-const fresh = [...valueChanges.slice(0, MAXV), ...permitChanges.slice(0, MAXP)].map((c) => ({ ...c, seen: Date.now() }));
+const fresh = [...valueChanges.slice(0, MAXV), ...permitChanges.slice(0, MAXP),
+               ...appChanges.slice(0, 3000), ...zoneChanges.slice(0, 3000)].map((c) => ({ ...c, seen: Date.now() }));
 const merged = [...fresh, ...(prevPub.items || [])]
   .filter((c) => Date.now() - (c.seen || 0) < 120 * 86400000)
   .slice(0, 20000);
