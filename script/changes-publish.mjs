@@ -11,37 +11,19 @@
 // unlocked app, on the owner's device. A filtered list would broadcast the
 // watchlist, which would be worse than publishing the database.
 import fs from "fs";
+import { ARCHIVE_ROOT, replay, lines as archiveLines, iso } from "./arclib.mjs";
 
 const ROOT = new URL("..", import.meta.url).pathname;
 const PUB = (process.env.ARGUS_PUB || ROOT + "pinboard-fresh/").replace(/\/?$/, "/");
-const ARC = PUB + "archive/";
+const ARC = ARCHIVE_ROOT(ROOT);
 const WINDOW_DAYS = 120;
-
-const iso = (d) => String(d).replace(/(\d{4})(\d\d)(\d\d)/, "$1-$2-$3");
 // An archive day is a Phoenix calendar day. Noon local is a fair stamp for it.
 const stamp = (d) => Date.parse(iso(d) + "T12:00:00-07:00");
 const cutoff = Date.now() - WINDOW_DAYS * 86400000;
 
 function read(name) {
-  const f = ARC + name + ".jsonl";
-  if (!fs.existsSync(f)) return { state: new Map(), lines: [], dead: new Map() };
-  const state = new Map(), lines = [], dead = new Map();
-  for (const raw of fs.readFileSync(f, "utf8").split("\n")) {
-    if (!raw) continue;
-    let l; try { l = JSON.parse(raw); } catch { continue; }
-    lines.push(l);
-    if (l.k === "+") state.set(l.id, { ...l.v });
-    // Keep what a record looked like the moment before it vanished. A project
-    // leaving the tracker is the news, and an address is the whole point of it.
-    else if (l.k === "-") { if (state.has(l.id)) dead.set(l.id, state.get(l.id)); state.delete(l.id); }
-    else if (l.k === "~") {
-      const cur = state.get(l.id);
-      if (cur === undefined) continue;
-      if (typeof cur !== "object" || cur === null) state.set(l.id, l.b);
-      else cur[l.f] = l.b;
-    }
-  }
-  return { state, lines, dead };
+  const { state, dead } = replay(ARC, name);
+  return { state, dead, lines: [...archiveLines(ARC, name)] };
 }
 
 const items = [];
@@ -101,6 +83,25 @@ const seenAt = (l) => stamp(l.d);
       desc: r.type || "", units: r.units ?? null, when: r.issued || r.received || null,
       lon: r.lon ?? null, lat: r.lat ?? null, seen: seenAt(l),
     });
+  }
+}
+
+/* ── ownership ─────────────────────────────────────────────────────────── */
+// The one the owner asked for first, and the one the old watcher said could
+// not be done. A parcel changing hands is the loudest thing in this file.
+{
+  const { state, lines } = read("owners");
+  const first = lines.length ? lines[0].d : null;
+  for (const l of lines) {
+    if (l.d === first || stamp(l.d) < cutoff || l.k !== "~") continue;
+    if (l.f !== "owner" && l.f !== "owner2" && l.f !== "mail") continue;
+    const r = state.get(l.id) || {};
+    const base = {
+      id: l.id, parcel: l.id, addr: r.site || "", value: r.value ?? null,
+      acres: r.acres ?? null, sub: r.sub || null, seen: stamp(l.d),
+    };
+    if (l.f === "mail") items.push({ t: "owner-moved", ...base, status: r.owner || "", was: l.a, to: l.b });
+    else items.push({ t: "owner-changed", ...base, status: l.b || "", was: l.a || null, to: l.b });
   }
 }
 

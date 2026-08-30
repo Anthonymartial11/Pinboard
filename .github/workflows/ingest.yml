@@ -16,10 +16,11 @@ on:
   schedule:
     - cron: "20 */3 * * *"    # news, every three hours
     - cron: "40 11 * * *"     # the archive, once a day, 4:40am Phoenix
+    - cron: "0 12 * * 0"      # the slow half, Sundays, 5am Phoenix
   workflow_dispatch:
     inputs:
       what:
-        description: "news, archive, or both"
+        description: "news, archive, weekly, or both"
         default: both
 
 permissions:
@@ -56,8 +57,21 @@ jobs:
         run: node script/archive.mjs
 
       # Turns the last few months of the archive into the list the app reads.
+      # The ownership roll and the company filings barely move week to week, and
+      # both are thousands of requests, so they get their own slower slot. The
+      # roll is archived even though it is a static 2021 snapshot: it belongs to
+      # Boise, and the day they retire that layer the only copy still standing
+      # is the copy that was taken first.
+      - name: Archive the ownership roll
+        if: github.event.schedule == '0 12 * * 0' || inputs.what == 'weekly'
+        run: node script/archive-owners.mjs
+
+      - name: Check the companies for dissolutions and moves
+        if: github.event.schedule == '0 12 * * 0' || inputs.what == 'weekly'
+        run: node script/archive-entities.mjs
+
       - name: Republish the change list
-        if: github.event.schedule == '40 11 * * *' || inputs.what == 'archive' || inputs.what == 'both'
+        if: github.event.schedule != '20 */3 * * *' || inputs.what != 'news'
         run: node script/changes-publish.mjs
 
       - name: Publish whatever changed
