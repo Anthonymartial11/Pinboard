@@ -1,1 +1,7 @@
 state/
+
+# never
+argus.key
+*.key
+key.txt
+entities.json
