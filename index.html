@@ -101,9 +101,9 @@
 <script>
 (function () {
   "use strict";
-  var SALT = "Na3ow7xctZpWXHQUI/vpWg==", IV = "lXOauhZNzV1zkm+x", BVER = "195db0534321", ITER = 1000000, BUILD = "10827af031c5b767";
-  var PIV = "yLj+dHKnRHTCxbFj", PVER = "5a84171b118f", HAS_PARCELS = true, MAPK = "CNBHH8kKmMAZZGJDx76bPoVT7CH+9hy8jebqt9aoMsmpb5vcqiz0OmDlsCMXkKHs+2sYtVtmBqBSobjX";
-  var DEVICES = [{"cred":"s2N4I9wgBORmW94p2tiPTxw9cok=","blob":"xWGACWOjaw7yz6Vm5xIbQ/ihDbqr5REBax2ZCAqOkKBJzI0mo+UYwT4ReZl6LowO4ZTnAHJGYdppNEl2VJr7xBJPClgihh5TXHGtBK3ZuPc8loLkZBFJMxiV4+UtcZzS2dNw605tGA++ypvZ1HZjCRgpvcxb2KKXHNKl3HFc/eAAYZZjAdifBaAKyuQM8b1opQezweEzG3wkw00UM9Cui6IGtp1bKw==","eph":"BEm5mokkxvLWWwEHMCdVEGO9FJSozN5Dy7Cdtjqbv5vS+ErVUvlvYqWQdeHyOd41QKxE0THwwiGoEm9dQ5Bvy4M=","wiv":"yPTQk2uEjAHWhv6+","wrap":"es+LhGvjYa84/8gXPaTgWIJpgc7hUqi885xILt5S6eLSC5cCDOqVeAP7ySNv0m2S"}];
+  var SALT = "90mvcYJ6Z+hSWUmMzvtwgw==", IV = "ckYH66ExpRdiffcs", BVER = "9060d3ad91d8", ITER = 1000000, BUILD = "cb7654c74b9e7b63";
+  var PIV = "yLj+dHKnRHTCxbFj", PVER = "5a84171b118f", HAS_PARCELS = true, MAPK = "j9gnG8ygvEy8Sg33euQe1qrXsxvbI8dxom4lFY4AJNC9jlDat638Q2PxSHA4E3NEPrIVLk0zvva0Q+nG";
+  var DEVICES = [{"cred":"s2N4I9wgBORmW94p2tiPTxw9cok=","blob":"xWGACWOjaw7yz6Vm5xIbQ/ihDbqr5REBax2ZCAqOkKBJzI0mo+UYwT4ReZl6LowO4ZTnAHJGYdppNEl2VJr7xBJPClgihh5TXHGtBK3ZuPc8loLkZBFJMxiV4+UtcZzS2dNw605tGA++ypvZ1HZjCRgpvcxb2KKXHNKl3HFc/eAAYZZjAdifBaAKyuQM8b1opQezweEzG3wkw00UM9Cui6IGtp1bKw==","eph":"BLYjsDyT07z5WR0A+jTxPCrydJ8flPY0zwPQ111e23x8Hi6C/6f0ewiYK0BU9dGpQRMWHjMyiN9yPha6Z8/8LcA=","wiv":"NgZrVa/S1EyKPnT1","wrap":"TIVfcf1LFLrk1AD9p9OQ/ILadBQCysowXcByfKfej7rupbxlrqEOJb8KVaSSn7HN"}];
   var PRF_SALT = new Uint8Array([73,80,68,45,80,82,70,45,118,49,7,19,84,201,66,13,148,222,41,90,177,5,99,140,250,33,68,201,17,86,120,55]);
   var b64 = function (s) { return Uint8Array.from(atob(s), function (c) { return c.charCodeAt(0); }); };
   var b64e = function (buf) { var u8 = new Uint8Array(buf), s = ""; for (var i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]); return btoa(s); };
@@ -435,6 +435,20 @@
         var m = String((e && e.message) || "");
         err.textContent = m.indexOf("did not download") >= 0 ? m : "Wrong password.";
         pw.value = ""; pw.focus();
+        /* A wrong password is nearly always the real answer, so that is what it
+           says. But a truncated or corrupt copy of board.enc fails decryption
+           in exactly the same way, and because the file is served from the
+           device cache it would keep failing forever with no way out. So the
+           FIRST failure quietly replaces the bytes from the network. If the
+           password was simply wrong, nothing changes and the next try behaves
+           as it always did. If the copy was bad, the next try just works. */
+        if (m.indexOf("did not download") < 0 && !window.__refetched) {
+          window.__refetched = true;
+          boardReady = fetch("./board.enc?v=" + BVER, { cache: "reload" })
+            .then(function (r) { if (!r.ok) throw new Error("fetch " + r.status); return r.arrayBuffer(); })
+            .then(function (bb) { boardBytes = bb; })
+            .catch(function () {});
+        }
       });
   });
 
