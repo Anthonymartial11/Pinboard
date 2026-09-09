@@ -49,6 +49,7 @@ jobs:
           node script/boot.mjs archive-entities
           node script/boot.mjs canyon-recorder
           node script/boot.mjs context-fetch
+          node script/boot.mjs abc-fetch
 
       - name: publish
         if: github.event.schedule != '20 */3 * * *' || inputs.what != 'news'
